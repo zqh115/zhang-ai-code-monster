@@ -15,7 +15,7 @@ import java.util.Map;
 public class MybatisCodeGenerator {
 
 
-    private static final String DATABASE_NAME = "user";
+    private static final String DATABASE_NAME = "app";
     /**
      * 运行该方法，即可生成代码
      */
