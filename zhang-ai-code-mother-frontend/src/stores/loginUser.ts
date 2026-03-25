@@ -1,28 +1,34 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { getCurrentUser } from '@/api/userController.ts'
 
-//
-// 登录用户信息
-//
-
 export const useLoginUserStore = defineStore('loginUser', () => {
-  // 默认值
   const loginUser = ref<API.LoginUserVO>({
     userName: '未登录',
   })
 
-  // 获取登录用户信息
   async function fetchLoginUser() {
-    const res = await getCurrentUser()
-    if (res.data.code === 0 && res.data.data) {
-      loginUser.value = res.data.data
+    try {
+      const res = await getCurrentUser()
+      if (res.data.code === 0 && res.data.data) {
+        loginUser.value = res.data.data
+        return
+      }
+    } catch (error) {
+      console.warn('fetchLoginUser failed', error)
+    }
+
+    loginUser.value = {
+      userName: '未登录',
     }
   }
-  // 更新登录用户信息
-  function setLoginUser(newLoginUser: any) {
+
+  function setLoginUser(newLoginUser: API.LoginUserVO) {
     loginUser.value = newLoginUser
   }
 
-  return { loginUser, setLoginUser, fetchLoginUser }
+  const isLogin = computed(() => Boolean(loginUser.value?.id))
+  const isAdmin = computed(() => loginUser.value?.userRole === 'admin')
+
+  return { loginUser, setLoginUser, fetchLoginUser, isLogin, isAdmin }
 })

@@ -1,38 +1,36 @@
 <template>
   <a-layout-footer class="footer">
     <div class="footer-content">
-      <p class="copyright">
-        <a
-          href="https://github.com/zqh115/zhang-ai-code-monster"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="author-link"
-        >
-          zhang AI 零代码生成平台
-        </a>
-      </p>
+      <div class="footer-brand">一句话，生成你想要的应用</div>
+      <p class="copyright">Zhang AI 应用生成平台 · 让创意更快落地</p>
     </div>
   </a-layout-footer>
 </template>
 
-<script setup lang="ts">
-// 无需额外的响应式数据
-</script>
-
 <style scoped>
 .footer {
-  background: #efefef;
+  background: transparent;
   text-align: center;
-  padding: 20px;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  padding: 20px 24px 32px;
+}
+
+.footer-content {
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  padding-top: 20px;
+}
+
+.footer-brand {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 6px;
 }
 
 .copyright {
   margin: 0;
-  color: #666;
-  font-size: 14px;
+  color: #64748b;
+  font-size: 13px;
 }
 </style>

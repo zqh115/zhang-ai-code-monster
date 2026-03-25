@@ -10,6 +10,23 @@ export default defineConfig({
     vue(),
     vueDevTools(),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/ant-design-vue') || id.includes('@ant-design')) {
+            return 'antdv'
+          }
+          if (id.includes('node_modules/vue') || id.includes('node_modules/pinia') || id.includes('node_modules/vue-router')) {
+            return 'vue-vendor'
+          }
+          if (id.includes('node_modules/dayjs')) {
+            return 'dayjs'
+          }
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
