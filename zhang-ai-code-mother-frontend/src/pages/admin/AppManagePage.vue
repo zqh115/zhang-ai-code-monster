@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import PageHeader from '@/components/PageHeader.vue'
 import { deleteAppByAdmin, listAppVoByPageByAdmin, updateAppByAdmin } from '@/api/appController'
 import { formatDateTime, getAppTypeLabel } from '@/utils/app'
 
@@ -58,30 +59,14 @@ const buildQueryParams = (): API.AppQueryRequest => {
     pageSize: searchParams.pageSize,
   }
 
-  if (searchParams.id?.trim()) {
-    params.id = searchParams.id.trim()
-  }
-  if (searchParams.appName?.trim()) {
-    params.appName = searchParams.appName.trim()
-  }
-  if (searchParams.cover?.trim()) {
-    params.cover = searchParams.cover.trim()
-  }
-  if (searchParams.initPrompt?.trim()) {
-    params.initPrompt = searchParams.initPrompt.trim()
-  }
-  if (searchParams.codeGenType?.trim()) {
-    params.codeGenType = searchParams.codeGenType.trim()
-  }
-  if (searchParams.deployKey?.trim()) {
-    params.deployKey = searchParams.deployKey.trim()
-  }
-  if (searchParams.userId?.trim()) {
-    params.userId = searchParams.userId.trim()
-  }
-  if (searchParams.priority !== undefined && searchParams.priority !== null) {
-    params.priority = searchParams.priority
-  }
+  if (searchParams.id?.trim()) params.id = searchParams.id.trim()
+  if (searchParams.appName?.trim()) params.appName = searchParams.appName.trim()
+  if (searchParams.cover?.trim()) params.cover = searchParams.cover.trim()
+  if (searchParams.initPrompt?.trim()) params.initPrompt = searchParams.initPrompt.trim()
+  if (searchParams.codeGenType?.trim()) params.codeGenType = searchParams.codeGenType.trim()
+  if (searchParams.deployKey?.trim()) params.deployKey = searchParams.deployKey.trim()
+  if (searchParams.userId?.trim()) params.userId = searchParams.userId.trim()
+  if (searchParams.priority !== undefined && searchParams.priority !== null) params.priority = searchParams.priority
 
   return params
 }
@@ -121,43 +106,29 @@ const resetSearch = () => {
 }
 
 const openEditPage = (appId?: string) => {
-  if (!appId) {
-    return
-  }
-  const url = router.resolve({
-    name: 'appEdit',
-    params: { id: appId },
-  }).href
+  if (!appId) return
+  const url = router.resolve({ name: 'appEdit', params: { id: appId } }).href
   window.open(url, '_blank')
 }
 
-const openChatPage = (appId?: string) => {
-  if (!appId) {
-    return
-  }
-  router.push({
-    name: 'appChat',
-    params: { id: appId },
-  })
+const openChatPage = async (appId?: string) => {
+  if (!appId) return
+  await router.push({ name: 'appChat', params: { id: appId } })
 }
 
 const handleDelete = async (appId?: string) => {
-  if (!appId) {
-    return
-  }
+  if (!appId) return
   const res = await deleteAppByAdmin({ id: appId })
   if (res.data.code === 0) {
     message.success('应用已删除')
     fetchData()
-  } else {
-    message.error(`删除失败，${res.data.message ?? '请稍后重试'}`)
+    return
   }
+  message.error(`删除失败，${res.data.message ?? '请稍后重试'}`)
 }
 
 const markFeatured = async (app?: API.AppVO) => {
-  if (!app?.id) {
-    return
-  }
+  if (!app?.id) return
   const res = await updateAppByAdmin({
     id: app.id,
     appName: app.appName,
@@ -167,9 +138,9 @@ const markFeatured = async (app?: API.AppVO) => {
   if (res.data.code === 0) {
     message.success('已设为精选')
     fetchData()
-  } else {
-    message.error(`设置精选失败，${res.data.message ?? '请稍后重试'}`)
+    return
   }
+  message.error(`设置精选失败，${res.data.message ?? '请稍后重试'}`)
 }
 
 onMounted(() => {
@@ -179,12 +150,10 @@ onMounted(() => {
 
 <template>
   <div class="manage-page page-shell">
-    <div class="manage-page__header">
-      <div>
-        <h1 class="page-title">应用管理</h1>
-        <p class="page-subtitle">管理员可按除时间外的任意字段筛选应用，并进行编辑、删除和精选操作。</p>
-      </div>
-    </div>
+    <PageHeader
+      title="应用管理"
+      subtitle="管理员可按除时间外的任意字段筛选应用，并进行编辑、删除和精选操作。"
+    />
 
     <a-form layout="vertical" class="search-form" @finish="doSearch">
       <div class="search-grid">
@@ -247,7 +216,7 @@ onMounted(() => {
         </template>
         <template v-else-if="column.dataIndex === 'priority'">
           <a-tag :color="record.priority === 99 ? 'gold' : 'blue'">
-            {{ record.priority ?? 0 }}
+            {{ record.priority === 99 ? '精选' : record.priority ?? 0 }}
           </a-tag>
         </template>
         <template v-else-if="column.dataIndex === 'user'">
@@ -264,12 +233,7 @@ onMounted(() => {
             <a-button type="link" @click="openEditPage(record.id)">编辑</a-button>
             <a-button type="link" @click="openChatPage(record.id)">详情</a-button>
             <a-button type="link" @click="markFeatured(record)">精选</a-button>
-            <a-popconfirm
-              title="确认删除该应用吗？"
-              ok-text="删除"
-              cancel-text="取消"
-              @confirm="handleDelete(record.id)"
-            >
+            <a-popconfirm title="确认删除该应用吗？" ok-text="删除" cancel-text="取消" @confirm="handleDelete(record.id)">
               <a-button danger type="link">删除</a-button>
             </a-popconfirm>
           </a-space>
@@ -282,10 +246,6 @@ onMounted(() => {
 <style scoped>
 .manage-page {
   padding: 32px;
-}
-
-.manage-page__header {
-  margin-bottom: 24px;
 }
 
 .search-form {

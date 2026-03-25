@@ -1,7 +1,7 @@
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-cn'
-import { API_ORIGIN } from '@/request'
+import { API_BASE_URL, API_ORIGIN } from '@/request'
 
 dayjs.extend(relativeTime)
 dayjs.locale('zh-cn')
@@ -11,6 +11,11 @@ export const MAX_USER_PAGE_SIZE = 20
 
 const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, '')
 
+const ensureApiSuffix = (value: string) => {
+  const normalizedValue = trimTrailingSlashes(value)
+  return normalizedValue.endsWith('/api') ? normalizedValue : `${normalizedValue}/api`
+}
+
 const getDefaultDeployBaseUrl = () => {
   if (typeof window === 'undefined') {
     return 'http://localhost'
@@ -19,8 +24,8 @@ const getDefaultDeployBaseUrl = () => {
   return `${protocol}//localhost`
 }
 
-export const APP_PREVIEW_BASE_URL = trimTrailingSlashes(
-  import.meta.env.VITE_APP_PREVIEW_BASE_URL ?? API_ORIGIN,
+export const APP_PREVIEW_BASE_URL = ensureApiSuffix(
+  import.meta.env.VITE_APP_PREVIEW_BASE_URL ?? API_BASE_URL ?? API_ORIGIN,
 )
 
 export const APP_DEPLOY_BASE_URL = trimTrailingSlashes(

@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import PageHeader from '@/components/PageHeader.vue'
 import { deleteUser, listUserVoByPage } from '@/api/userController'
 import { formatDateTime } from '@/utils/app'
 
@@ -16,45 +17,14 @@ const searchParams = reactive<API.UserQueryRequest>({
 })
 
 const columns = [
-  {
-    title: 'ID',
-    dataIndex: 'id',
-    width: 80,
-  },
-  {
-    title: '账号',
-    dataIndex: 'userAccount',
-  },
-  {
-    title: '用户名称',
-    dataIndex: 'userName',
-  },
-  {
-    title: '头像',
-    dataIndex: 'userAvatar',
-    width: 120,
-  },
-  {
-    title: '简介',
-    dataIndex: 'userProfile',
-    ellipsis: true,
-  },
-  {
-    title: '用户角色',
-    dataIndex: 'userRole',
-    width: 120,
-  },
-  {
-    title: '创建时间',
-    dataIndex: 'createTime',
-    width: 180,
-  },
-  {
-    title: '操作',
-    key: 'action',
-    width: 120,
-    fixed: 'right',
-  },
+  { title: 'ID', dataIndex: 'id', width: 80 },
+  { title: '账号', dataIndex: 'userAccount' },
+  { title: '用户名', dataIndex: 'userName' },
+  { title: '头像', dataIndex: 'userAvatar', width: 120 },
+  { title: '简介', dataIndex: 'userProfile', ellipsis: true },
+  { title: '用户角色', dataIndex: 'userRole', width: 120 },
+  { title: '创建时间', dataIndex: 'createTime', width: 180 },
+  { title: '操作', key: 'action', width: 120, fixed: 'right' },
 ]
 
 const pagination = computed(() => ({
@@ -74,9 +44,7 @@ const handleTableChange = (page: { current?: number; pageSize?: number }) => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const res = await listUserVoByPage({
-      ...searchParams,
-    })
+    const res = await listUserVoByPage({ ...searchParams })
     if (res.data.code === 0 && res.data.data) {
       data.value = res.data.data.records ?? []
       total.value = res.data.data.totalRow ?? 0
@@ -102,16 +70,14 @@ const resetSearch = () => {
 }
 
 const doDelete = async (id?: string) => {
-  if (!id) {
-    return
-  }
+  if (!id) return
   const res = await deleteUser({ id })
   if (res.data.code === 0) {
     message.success('删除成功')
     fetchData()
-  } else {
-    message.error(`删除失败，${res.data.message ?? '请稍后重试'}`)
+    return
   }
+  message.error(`删除失败，${res.data.message ?? '请稍后重试'}`)
 }
 
 onMounted(() => {
@@ -121,19 +87,17 @@ onMounted(() => {
 
 <template>
   <div class="manage-page page-shell">
-    <div class="manage-page__header">
-      <div>
-        <h1 class="page-title">用户管理</h1>
-        <p class="page-subtitle">管理员可以在这里按账号或名称查询用户，并进行删除操作。</p>
-      </div>
-    </div>
+    <PageHeader
+      title="用户管理"
+      subtitle="管理员可以在这里按账号或名称查询用户，并进行删除操作。"
+    />
 
     <a-form layout="inline" :model="searchParams" class="search-form" @finish="doSearch">
       <a-form-item label="账号">
         <a-input v-model:value="searchParams.userAccount" placeholder="请输入账号" allow-clear />
       </a-form-item>
-      <a-form-item label="用户名称">
-        <a-input v-model:value="searchParams.userName" placeholder="请输入用户名称" allow-clear />
+      <a-form-item label="用户名">
+        <a-input v-model:value="searchParams.userName" placeholder="请输入用户名" allow-clear />
       </a-form-item>
       <a-form-item>
         <a-space>
@@ -167,12 +131,7 @@ onMounted(() => {
           {{ formatDateTime(record.createTime) }}
         </template>
         <template v-else-if="column.key === 'action'">
-          <a-popconfirm
-            title="确认删除该用户吗？"
-            ok-text="删除"
-            cancel-text="取消"
-            @confirm="doDelete(record.id)"
-          >
+          <a-popconfirm title="确认删除该用户吗？" ok-text="删除" cancel-text="取消" @confirm="doDelete(record.id)">
             <a-button danger type="link">删除</a-button>
           </a-popconfirm>
         </template>
@@ -186,13 +145,15 @@ onMounted(() => {
   padding: 32px;
 }
 
-.manage-page__header {
-  margin-bottom: 24px;
-}
-
 .search-form {
   display: flex;
   gap: 12px 0;
   margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .manage-page {
+    padding: 20px;
+  }
 }
 </style>

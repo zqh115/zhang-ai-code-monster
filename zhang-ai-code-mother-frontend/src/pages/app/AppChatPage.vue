@@ -6,6 +6,7 @@ import MarkdownIt from 'markdown-it'
 import 'highlight.js/styles/github-dark.css'
 import { message, Modal } from 'ant-design-vue'
 import { ArrowLeftOutlined, EditOutlined, EyeOutlined, RocketOutlined, SendOutlined } from '@ant-design/icons-vue'
+import AppPreviewPanel from '@/components/AppPreviewPanel.vue'
 import { deployApp, getAppVoById, getAppVoByIdByAdmin } from '@/api/appController'
 import { API_BASE_URL } from '@/request'
 import { useLoginUserStore } from '@/stores/loginUser'
@@ -43,12 +44,10 @@ const isOwner = computed(
 )
 const canManageApp = computed(() => Boolean(loginUserStore.isAdmin || isOwner.value))
 const canChat = computed(() => canManageApp.value)
-const composerTooltip = computed(() =>
-  canChat.value ? '' : '无法在别人的作品下对话哦~',
-)
+const composerTooltip = computed(() => (canChat.value ? '' : '你只能继续编辑自己的应用'))
 const emptyDescription = computed(() => {
   if (isViewMode.value) {
-    return canChat.value ? '当前为查看模式，可继续输入新需求完善作品' : '当前作品暂无可展示的对话记录'
+    return canChat.value ? '当前是查看模式，你仍然可以继续补充需求优化应用。' : '当前应用暂无可展示的对话记录'
   }
   return '发送一句描述，开始生成你的应用'
 })
@@ -95,7 +94,6 @@ const renderMessageContent = (content: string) => {
   if (!normalizedContent) {
     return ''
   }
-
   return markdownRenderer.render(normalizedContent)
 }
 
@@ -120,20 +118,18 @@ const fetchAppDetail = async () => {
   loading.value = true
   try {
     const res = loginUserStore.isAdmin
-      ? await getAppVoByIdByAdmin({
-          id: appId.value,
-        })
-      : await getAppVoById({
-          id: appId.value,
-        })
+      ? await getAppVoByIdByAdmin({ id: appId.value })
+      : await getAppVoById({ id: appId.value })
+
     if (res.data.code === 0 && res.data.data) {
       appDetail.value = res.data.data
       return
     }
-    message.error(`获取应用详情失败：${res.data.message ?? '请稍后重试'}`)
+
+    message.error(`获取应用详情失败，${res.data.message ?? '请稍后重试'}`)
     await router.replace('/')
   } catch (error) {
-    message.error(`获取应用详情失败：${(error as Error).message || '请稍后重试'}`)
+    message.error(`获取应用详情失败，${(error as Error).message || '请稍后重试'}`)
     await router.replace('/')
   } finally {
     loading.value = false
@@ -147,7 +143,7 @@ const refreshPreview = async () => {
 
 const sendMessage = async (rawMessage?: string) => {
   if (!canChat.value) {
-    message.warning('无法在别人的作品下对话哦~')
+    message.warning('你只能继续编辑自己的应用')
     return
   }
 
@@ -164,6 +160,7 @@ const sendMessage = async (rawMessage?: string) => {
     role: 'user',
     content,
   })
+
   const assistantMessage: ChatMessage = {
     id: `assistant-${Date.now()}`,
     role: 'assistant',
@@ -180,6 +177,7 @@ const sendMessage = async (rawMessage?: string) => {
       appId: String(appId.value),
       message: content,
     })
+
     await streamSse({
       url: `${API_BASE_URL}/app/chat/gen/code?${search.toString()}`,
       signal: currentAbortController.signal,
@@ -191,15 +189,16 @@ const sendMessage = async (rawMessage?: string) => {
     })
 
     if (!assistantMessage.content.trim()) {
-      assistantMessage.content = '代码生成已完成，你可以继续补充需求完善这个应用。'
+      assistantMessage.content = '代码生成已完成，你可以继续补充需求来完善这个应用。'
       messages.value = [...messages.value]
     }
+
     await refreshPreview()
   } catch (error) {
     if ((error as Error).name !== 'AbortError') {
       assistantMessage.content ||= '生成过程被中断了，请稍后重试。'
       messages.value = [...messages.value]
-      message.error(`生成失败：${(error as Error).message || '请稍后重试'}`)
+      message.error(`生成失败，${(error as Error).message || '请稍后重试'}`)
     }
   } finally {
     sending.value = false
@@ -226,17 +225,13 @@ const tryAutoSend = async () => {
 }
 
 const handleDeploy = async () => {
-  if (!canManageApp.value) {
+  if (!canManageApp.value || !appId.value) {
     return
   }
-  if (!appId.value) {
-    return
-  }
+
   deploying.value = true
   try {
-    const res = await deployApp({
-      appId: appId.value,
-    })
+    const res = await deployApp({ appId: appId.value })
     if (res.data.code === 0 && res.data.data) {
       Modal.success({
         title: '部署成功',
@@ -248,7 +243,7 @@ const handleDeploy = async () => {
       })
       return
     }
-    message.error(`部署失败：${res.data.message ?? '请稍后重试'}`)
+    message.error(`部署失败，${res.data.message ?? '请稍后重试'}`)
   } finally {
     deploying.value = false
   }
@@ -260,11 +255,11 @@ const openPreviewInNewTab = () => {
   }
 }
 
-const goEditPage = () => {
+const goEditPage = async () => {
   if (!canManageApp.value) {
     return
   }
-  router.push({ name: 'appEdit', params: { id: appId.value } })
+  await router.push({ name: 'appEdit', params: { id: appId.value } })
 }
 
 watch(
@@ -296,7 +291,7 @@ onBeforeUnmount(() => {
         <div class="title-block">
           <h1>{{ appName }}</h1>
           <p>
-            {{ appDetail?.initPrompt || '通过对话不断补充需求，你可以继续完善这个应用。' }}
+            {{ appDetail?.initPrompt || '通过持续对话不断补充需求，你可以逐步完善这个应用。' }}
           </p>
         </div>
       </div>
@@ -327,7 +322,7 @@ onBeforeUnmount(() => {
                   <div class="message-role">{{ item.role === 'user' ? '我' : 'AI' }}</div>
                   <div
                     class="message-content"
-                    v-html="renderMessageContent(item.content || '正在生成中…')"
+                    v-html="renderMessageContent(item.content || '正在生成中...')"
                   ></div>
                 </div>
               </div>
@@ -346,7 +341,7 @@ onBeforeUnmount(() => {
                 :placeholder="
                   canChat
                     ? '描述越具体，页面结构、文案和风格会越贴合你的需求。'
-                    : '无法在别人的作品下对话哦~'
+                    : '你只能继续编辑自己的应用'
                 "
                 @pressEnter.exact.prevent="sendMessage()"
               />
@@ -362,28 +357,25 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="preview-panel page-shell">
-        <div class="preview-panel__header">
-          <div>
-            <h2>生成后的网页展示</h2>
-            <p>流式返回完成后，右侧会自动刷新并展示最新生成的网站效果。</p>
-          </div>
+      <AppPreviewPanel
+        class="preview-panel"
+        title="生成后的网页展示"
+        description="流式返回完成后，右侧会自动刷新并展示最新生成的网站效果。"
+        :src="previewUrl"
+        :loading="previewLoading"
+        iframe-title="应用预览"
+        empty-title="等待生成结果"
+        empty-description="发送你的描述后，AI 会一边生成一边回复，网页完成后会在这里自动展示。"
+        :full-height="true"
+        min-height="520px"
+      >
+        <template #actions>
           <a-button v-if="previewUrl" @click="openPreviewInNewTab">
             <EyeOutlined />
             新窗口打开
           </a-button>
-        </div>
-
-        <div class="preview-panel__body">
-          <a-spin :spinning="previewLoading">
-            <iframe v-if="previewUrl" :src="previewUrl" class="preview-frame" title="应用预览" />
-            <div v-else class="preview-empty">
-              <h3>等待生成结果</h3>
-              <p>发送你的描述后，AI 会边生成边回复，网页完成后会在这里自动展示。</p>
-            </div>
-          </a-spin>
-        </div>
-      </section>
+        </template>
+      </AppPreviewPanel>
     </div>
   </div>
 </template>
@@ -438,10 +430,6 @@ onBeforeUnmount(() => {
   gap: 24px;
   height: calc(100vh - 132px);
   min-height: 0;
-}
-
-.chat-workspace--single {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .chat-panel,
@@ -652,62 +640,7 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
-.composer-tip,
-.preview-panel__header p {
-  color: #64748b;
-}
-
-.preview-panel__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: center;
-  padding: 22px 22px 0;
-}
-
-.preview-panel__header h2 {
-  margin-bottom: 6px;
-  font-size: 26px;
-}
-
-.preview-panel__body {
-  flex: 1;
-  padding: 22px;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.preview-panel__body :deep(.ant-spin-nested-loading) {
-  height: 100%;
-}
-
-.preview-panel__body :deep(.ant-spin-container) {
-  height: 100%;
-}
-
-.preview-frame {
-  width: 100%;
-  height: 100%;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 24px;
-  background: #fff;
-}
-
-.preview-empty {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
-  border-radius: 24px;
-  border: 1px dashed rgba(148, 163, 184, 0.4);
-  background: linear-gradient(135deg, rgba(236, 254, 255, 0.62), rgba(255, 255, 255, 0.96));
-  text-align: center;
-}
-
-.preview-empty p {
-  max-width: 380px;
+.composer-tip {
   color: #64748b;
 }
 
@@ -717,8 +650,7 @@ onBeforeUnmount(() => {
     overflow: visible;
   }
 
-  .chat-workspace,
-  .chat-workspace--single {
+  .chat-workspace {
     grid-template-columns: 1fr;
     height: auto;
   }
@@ -731,19 +663,6 @@ onBeforeUnmount(() => {
   .message-list {
     max-height: 560px;
   }
-
-  .preview-frame {
-    min-height: 520px;
-  }
-
-  .preview-empty {
-    min-height: 520px;
-  }
-
-  .preview-panel__body :deep(.ant-spin-nested-loading),
-  .preview-panel__body :deep(.ant-spin-container) {
-    min-height: 520px;
-  }
 }
 
 @media (max-width: 768px) {
@@ -754,8 +673,7 @@ onBeforeUnmount(() => {
   .chat-topbar,
   .chat-topbar__left,
   .chat-topbar__actions,
-  .composer__footer,
-  .preview-panel__header {
+  .composer__footer {
     flex-direction: column;
     align-items: stretch;
   }

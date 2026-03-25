@@ -6,13 +6,11 @@ import { formatRelativeDate, getAppCoverStyle, getAppTypeLabel } from '@/utils/a
 const props = withDefaults(
   defineProps<{
     app: API.AppVO
-    showOwner?: boolean
     editable?: boolean
     deletable?: boolean
     featured?: boolean
   }>(),
   {
-    showOwner: false,
     editable: false,
     deletable: false,
     featured: false,

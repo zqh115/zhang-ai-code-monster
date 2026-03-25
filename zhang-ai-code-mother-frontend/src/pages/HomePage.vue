@@ -312,7 +312,6 @@ onMounted(() => {
               v-for="app in featuredApps"
               :key="app.id"
               :app="app"
-              show-owner
               featured
               @open="openChat"
               @open-deploy="openDeploy"
