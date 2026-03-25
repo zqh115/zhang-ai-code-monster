@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github.css'
 import { message, Modal } from 'ant-design-vue'
 import { ArrowLeftOutlined, EditOutlined, EyeOutlined, RocketOutlined, SendOutlined } from '@ant-design/icons-vue'
 import { deployApp, getAppVoById, getAppVoByIdByAdmin } from '@/api/appController'
@@ -49,6 +51,81 @@ const emptyDescription = computed(() => {
   }
   return '发送一句描述，开始生成你的应用'
 })
+
+const escapeHtml = (content: string) =>
+  content
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const renderInlineCode = (content: string) => {
+  const segments = content.split(/(`[^`\n]+`)/g)
+  return segments
+    .map((segment) => {
+      if (segment.startsWith('`') && segment.endsWith('`')) {
+        return `<code class="inline-code">${escapeHtml(segment.slice(1, -1))}</code>`
+      }
+      return escapeHtml(segment)
+    })
+    .join('')
+}
+
+const renderTextContent = (content: string) => {
+  const normalizedContent = content.trim()
+  if (!normalizedContent) {
+    return ''
+  }
+  return normalizedContent
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${renderInlineCode(paragraph).replace(/\n/g, '<br />')}</p>`)
+    .join('')
+}
+
+const renderCodeBlock = (language: string | undefined, code: string) => {
+  const normalizedLanguage = language?.trim().toLowerCase()
+  const trimmedCode = code.replace(/\n$/, '')
+
+  if (normalizedLanguage && hljs.getLanguage(normalizedLanguage)) {
+    return `<pre class="code-block"><code class="hljs language-${normalizedLanguage}">${hljs.highlight(trimmedCode, {
+      language: normalizedLanguage,
+      ignoreIllegals: true,
+    }).value}</code></pre>`
+  }
+
+  return `<pre class="code-block"><code class="hljs">${hljs.highlightAuto(trimmedCode).value}</code></pre>`
+}
+
+const renderMessageContent = (content: string) => {
+  if (!content) {
+    return ''
+  }
+
+  const fenceRegex = /```([\w-]+)?\n([\s\S]*?)```/g
+  let result = ''
+  let lastIndex = 0
+
+  for (const match of content.matchAll(fenceRegex)) {
+    const matchIndex = match.index ?? 0
+    const [fullMatch, language, code] = match
+    const textBefore = content.slice(lastIndex, matchIndex)
+
+    if (textBefore.trim()) {
+      result += renderTextContent(textBefore)
+    }
+
+    result += renderCodeBlock(language, code ?? '')
+    lastIndex = matchIndex + fullMatch.length
+  }
+
+  const restText = content.slice(lastIndex)
+  if (restText.trim()) {
+    result += renderTextContent(restText)
+  }
+
+  return result || renderTextContent(content)
+}
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -276,7 +353,10 @@ onBeforeUnmount(() => {
               >
                 <div class="message-bubble">
                   <div class="message-role">{{ item.role === 'user' ? '我' : 'AI' }}</div>
-                  <div class="message-content">{{ item.content || '正在生成中…' }}</div>
+                  <div
+                    class="message-content"
+                    v-html="renderMessageContent(item.content || '正在生成中…')"
+                  ></div>
                 </div>
               </div>
             </template>
@@ -445,6 +525,42 @@ onBeforeUnmount(() => {
 .message-content {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.message-content :deep(p) {
+  margin: 0;
+}
+
+.message-content :deep(p + p) {
+  margin-top: 12px;
+}
+
+.message-content :deep(.inline-code) {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.16);
+  color: inherit;
+  font-size: 0.92em;
+}
+
+.message-content :deep(.code-block) {
+  margin: 12px 0 0;
+  overflow-x: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: #f8fafc;
+}
+
+.message-content :deep(.code-block:first-child) {
+  margin-top: 0;
+}
+
+.message-content :deep(.code-block code.hljs) {
+  display: block;
+  padding: 16px;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .composer {
