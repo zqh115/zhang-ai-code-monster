@@ -8,6 +8,7 @@ import com.zqh.zhangaicodemother.model.entity.User;
 import com.zqh.zhangaicodemother.model.vo.AppVO;
 import reactor.core.publisher.Flux;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
@@ -26,4 +27,6 @@ public interface AppService extends IService<App> {
     Flux<String> chatToGenCode(Long appId, String message, User loginUser);
 
     String deployApp(Long appId, User loginUser);
+
+    boolean removeById(Serializable id);
 }
