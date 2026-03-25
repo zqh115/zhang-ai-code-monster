@@ -30,6 +30,7 @@ const coverStyle = computed(() => getAppCoverStyle(props.app.appName || String(p
 const appTitle = computed(() => props.app.appName || '未命名应用')
 const ownerName = computed(() => props.app.user?.userName || '官方精选')
 const ownerInitial = computed(() => ownerName.value.slice(0, 1).toUpperCase())
+const isFeatured = computed(() => props.featured || props.app.priority === 99)
 const placeholderDescription = computed(
   () => props.app.initPrompt || '等待更多描述来丰富页面内容和交互结构。',
 )
@@ -60,7 +61,7 @@ const placeholderDescription = computed(
 
           <div class="app-card__badges">
             <a-tag color="processing">{{ getAppTypeLabel(app.codeGenType) }}</a-tag>
-            <a-tag v-if="featured" color="gold">
+            <a-tag v-if="isFeatured" color="gold">
               <template #icon>
                 <StarFilled />
               </template>
@@ -72,7 +73,6 @@ const placeholderDescription = computed(
 
       <div class="app-card__tags">
         <a-tag v-if="app.createTime" color="default">{{ formatRelativeDate(app.createTime) }}</a-tag>
-        <a-tag v-if="app.priority === 99" color="success">优先级 99</a-tag>
       </div>
 
       <div class="app-card__actions">

@@ -1,7 +1,7 @@
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-cn'
-import { API_BASE_URL } from '@/request'
+import { API_ORIGIN } from '@/request'
 
 dayjs.extend(relativeTime)
 dayjs.locale('zh-cn')
@@ -9,11 +9,29 @@ dayjs.locale('zh-cn')
 export const DEFAULT_APP_PAGE_SIZE = 6
 export const MAX_USER_PAGE_SIZE = 20
 
+const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, '')
+
+const getDefaultDeployBaseUrl = () => {
+  if (typeof window === 'undefined') {
+    return 'http://localhost'
+  }
+  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
+  return `${protocol}//localhost`
+}
+
+export const APP_PREVIEW_BASE_URL = trimTrailingSlashes(
+  import.meta.env.VITE_APP_PREVIEW_BASE_URL ?? API_ORIGIN,
+)
+
+export const APP_DEPLOY_BASE_URL = trimTrailingSlashes(
+  import.meta.env.VITE_APP_DEPLOY_BASE_URL ?? getDefaultDeployBaseUrl(),
+)
+
 export function buildLocalPreviewUrl(appId: string, codeGenType?: string) {
   if (!codeGenType) {
     return ''
   }
-  return `${API_BASE_URL}/static/${codeGenType}_${appId}/?t=${Date.now()}`
+  return `${APP_PREVIEW_BASE_URL}/static/${codeGenType}_${appId}/?t=${Date.now()}`
 }
 
 export function buildAppDeployUrl(deployKey?: string) {
@@ -21,8 +39,7 @@ export function buildAppDeployUrl(deployKey?: string) {
   if (!normalizedDeployKey) {
     return ''
   }
-  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
-  return `${protocol}//localhost/${normalizedDeployKey}`
+  return `${APP_DEPLOY_BASE_URL}/${normalizedDeployKey}`
 }
 
 export function formatDateTime(dateTime?: string) {
