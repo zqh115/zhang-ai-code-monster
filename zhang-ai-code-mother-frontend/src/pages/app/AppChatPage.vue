@@ -2,7 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import hljs from 'highlight.js'
-import 'highlight.js/styles/github.css'
+import MarkdownIt from 'markdown-it'
+import 'highlight.js/styles/github-dark.css'
 import { message, Modal } from 'ant-design-vue'
 import { ArrowLeftOutlined, EditOutlined, EyeOutlined, RocketOutlined, SendOutlined } from '@ant-design/icons-vue'
 import { deployApp, getAppVoById, getAppVoByIdByAdmin } from '@/api/appController'
@@ -52,79 +53,50 @@ const emptyDescription = computed(() => {
   return '发送一句描述，开始生成你的应用'
 })
 
-const escapeHtml = (content: string) =>
-  content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-
-const renderInlineCode = (content: string) => {
-  const segments = content.split(/(`[^`\n]+`)/g)
-  return segments
-    .map((segment) => {
-      if (segment.startsWith('`') && segment.endsWith('`')) {
-        return `<code class="inline-code">${escapeHtml(segment.slice(1, -1))}</code>`
-      }
-      return escapeHtml(segment)
-    })
-    .join('')
+const highlightLanguageAliases: Record<string, string> = {
+  html: 'xml',
+  js: 'javascript',
+  ts: 'typescript',
+  shell: 'bash',
+  sh: 'bash',
+  vue: 'xml',
 }
 
-const renderTextContent = (content: string) => {
+const resolveHighlightLanguage = (language?: string) => {
+  const normalizedLanguage = language?.trim().toLowerCase()
+  if (!normalizedLanguage) {
+    return undefined
+  }
+
+  const aliasedLanguage = highlightLanguageAliases[normalizedLanguage] ?? normalizedLanguage
+  return hljs.getLanguage(aliasedLanguage) ? aliasedLanguage : undefined
+}
+
+const markdownRenderer = new MarkdownIt({
+  breaks: true,
+  linkify: true,
+  typographer: true,
+  highlight(code: string, language: string) {
+    const resolvedLanguage = resolveHighlightLanguage(language)
+    const highlightedCode = resolvedLanguage
+      ? hljs.highlight(code, {
+          language: resolvedLanguage,
+          ignoreIllegals: true,
+        }).value
+      : hljs.highlightAuto(code).value
+
+    const languageClass = resolvedLanguage ? ` language-${resolvedLanguage}` : ''
+    return `<pre class="code-block"><code class="hljs${languageClass}">${highlightedCode}</code></pre>`
+  },
+})
+
+const renderMessageContent = (content: string) => {
   const normalizedContent = content.trim()
   if (!normalizedContent) {
     return ''
   }
-  return normalizedContent
-    .split(/\n{2,}/)
-    .map((paragraph) => `<p>${renderInlineCode(paragraph).replace(/\n/g, '<br />')}</p>`)
-    .join('')
-}
 
-const renderCodeBlock = (language: string | undefined, code: string) => {
-  const normalizedLanguage = language?.trim().toLowerCase()
-  const trimmedCode = code.replace(/\n$/, '')
-
-  if (normalizedLanguage && hljs.getLanguage(normalizedLanguage)) {
-    return `<pre class="code-block"><code class="hljs language-${normalizedLanguage}">${hljs.highlight(trimmedCode, {
-      language: normalizedLanguage,
-      ignoreIllegals: true,
-    }).value}</code></pre>`
-  }
-
-  return `<pre class="code-block"><code class="hljs">${hljs.highlightAuto(trimmedCode).value}</code></pre>`
-}
-
-const renderMessageContent = (content: string) => {
-  if (!content) {
-    return ''
-  }
-
-  const fenceRegex = /```([\w-]+)?\n([\s\S]*?)```/g
-  let result = ''
-  let lastIndex = 0
-
-  for (const match of content.matchAll(fenceRegex)) {
-    const matchIndex = match.index ?? 0
-    const [fullMatch, language, code] = match
-    const textBefore = content.slice(lastIndex, matchIndex)
-
-    if (textBefore.trim()) {
-      result += renderTextContent(textBefore)
-    }
-
-    result += renderCodeBlock(language, code ?? '')
-    lastIndex = matchIndex + fullMatch.length
-  }
-
-  const restText = content.slice(lastIndex)
-  if (restText.trim()) {
-    result += renderTextContent(restText)
-  }
-
-  return result || renderTextContent(content)
+  return markdownRenderer.render(normalizedContent)
 }
 
 const scrollToBottom = () => {
@@ -462,8 +434,8 @@ onBeforeUnmount(() => {
 
 .chat-workspace {
   display: grid;
-  grid-template-columns: 420px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(480px, 560px) minmax(0, 1fr);
+  gap: 24px;
   height: calc(100vh - 132px);
   min-height: 0;
 }
@@ -488,7 +460,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 22px;
+  padding: 24px;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0.95));
 }
 
@@ -502,9 +474,9 @@ onBeforeUnmount(() => {
 }
 
 .message-bubble {
-  max-width: 86%;
-  padding: 14px 16px;
-  border-radius: 20px;
+  max-width: 94%;
+  padding: 16px 18px;
+  border-radius: 22px;
   background: #fff;
   border: 1px solid rgba(148, 163, 184, 0.18);
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
@@ -523,44 +495,143 @@ onBeforeUnmount(() => {
 }
 
 .message-content {
-  white-space: pre-wrap;
   word-break: break-word;
+  font-size: 14px;
+  line-height: 1.75;
 }
 
-.message-content :deep(p) {
-  margin: 0;
+.message-content :deep(*:first-child) {
+  margin-top: 0;
 }
 
-.message-content :deep(p + p) {
-  margin-top: 12px;
+.message-content :deep(*:last-child) {
+  margin-bottom: 0;
 }
 
-.message-content :deep(.inline-code) {
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: rgba(148, 163, 184, 0.16);
-  color: inherit;
+.message-content :deep(h1),
+.message-content :deep(h2),
+.message-content :deep(h3),
+.message-content :deep(h4),
+.message-content :deep(h5),
+.message-content :deep(h6) {
+  margin: 1.1em 0 0.55em;
+  line-height: 1.35;
+}
+
+.message-content :deep(h1) {
+  font-size: 1.5em;
+}
+
+.message-content :deep(h2) {
+  font-size: 1.32em;
+}
+
+.message-content :deep(h3) {
+  font-size: 1.18em;
+}
+
+.message-content :deep(p),
+.message-content :deep(ul),
+.message-content :deep(ol),
+.message-content :deep(blockquote),
+.message-content :deep(pre),
+.message-content :deep(table),
+.message-content :deep(hr) {
+  margin: 0.9em 0;
+}
+
+.message-content :deep(ul),
+.message-content :deep(ol) {
+  padding-left: 1.4em;
+}
+
+.message-content :deep(li + li) {
+  margin-top: 0.35em;
+}
+
+.message-content :deep(a) {
+  color: #1677ff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.message-content :deep(strong) {
+  font-weight: 700;
+}
+
+.message-content :deep(code:not(.hljs)) {
+  padding: 0.18em 0.45em;
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.07);
+  color: #0f172a;
   font-size: 0.92em;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace;
+}
+
+.message-content :deep(blockquote) {
+  padding: 0.9em 1em;
+  border-left: 4px solid rgba(22, 119, 255, 0.28);
+  border-radius: 0 14px 14px 0;
+  background: rgba(241, 245, 249, 0.92);
+  color: #475569;
+}
+
+.message-content :deep(hr) {
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.26);
+}
+
+.message-content :deep(table) {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.message-content :deep(th),
+.message-content :deep(td) {
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  text-align: left;
+  vertical-align: top;
+}
+
+.message-content :deep(th) {
+  background: rgba(241, 245, 249, 0.95);
+  font-weight: 700;
 }
 
 .message-content :deep(.code-block) {
-  margin: 12px 0 0;
+  margin: 1em 0;
   overflow-x: auto;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: #f8fafc;
-}
-
-.message-content :deep(.code-block:first-child) {
-  margin-top: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #0f172a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .message-content :deep(.code-block code.hljs) {
   display: block;
-  padding: 16px;
+  padding: 18px 20px;
   background: transparent;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 13.5px;
+  line-height: 1.7;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace;
+}
+
+.message-item--user .message-content :deep(a) {
+  color: #bfdbfe;
+}
+
+.message-item--user .message-content :deep(code:not(.hljs)) {
+  background: rgba(255, 255, 255, 0.18);
+  color: #f8fafc;
+}
+
+.message-item--user .message-content :deep(blockquote) {
+  background: rgba(255, 255, 255, 0.08);
+  border-left-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.84);
 }
 
 .composer {
