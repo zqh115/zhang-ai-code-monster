@@ -32,9 +32,9 @@ const searchParams = reactive<
 })
 
 const columns = [
-  { title: 'ID', dataIndex: 'id', width: 80, fixed: 'left' },
-  { title: '应用 ID', dataIndex: 'appId', width: 100 },
-  { title: '用户 ID', dataIndex: 'userId', width: 100 },
+  { title: 'ID', dataIndex: 'id', width: 120, fixed: 'left' },
+  { title: '应用 ID', dataIndex: 'appId', width: 140 },
+  { title: '用户 ID', dataIndex: 'userId', width: 140 },
   { title: '消息类型', dataIndex: 'messageType', width: 120 },
   { title: '消息内容', dataIndex: 'message', ellipsis: true },
   { title: '创建时间', dataIndex: 'createTime', width: 180 },
@@ -86,21 +86,15 @@ const fetchData = async () => {
       total.value = res.data.data.totalRow ?? 0
       return
     }
-    message.error(`获取对话列表失败，${res.data.message ?? '请稍后重试'}`)
+    message.error(`获取对话列表失败：${res.data.message ?? '请稍后重试'}`)
   } finally {
     loading.value = false
   }
 }
 
-const handleTableChange = (page: { current?: number; pageSize?: number }) => {
-  searchParams.pageNum = page.current ?? 1
-  searchParams.pageSize = page.pageSize ?? searchParams.pageSize
-  fetchData()
-}
-
 const doSearch = () => {
   searchParams.pageNum = 1
-  fetchData()
+  void fetchData()
 }
 
 const resetSearch = () => {
@@ -112,7 +106,13 @@ const resetSearch = () => {
   searchParams.appId = undefined
   searchParams.userId = undefined
   searchParams.lastCreateTime = ''
-  fetchData()
+  void fetchData()
+}
+
+const handleTableChange = (page: { current?: number; pageSize?: number }) => {
+  searchParams.pageNum = page.current ?? 1
+  searchParams.pageSize = page.pageSize ?? searchParams.pageSize
+  void fetchData()
 }
 
 const openDetail = (record: API.ChatHistory) => {
@@ -121,40 +121,35 @@ const openDetail = (record: API.ChatHistory) => {
 }
 
 const openAppChat = async (appId?: API.IdType) => {
-  if (!hasEntityId(appId)) {
-    return
-  }
-  const targetAppId = String(appId)
-  await router.push({
-    name: 'appChat',
-    params: { id: targetAppId },
-  })
+  if (!hasEntityId(appId)) return
+  await router.push({ name: 'appChat', params: { id: String(appId) } })
 }
 
 const handleDelete = async (id?: API.IdType) => {
   const targetId = normalizeEntityId(id)
-  if (!targetId) {
-    return
-  }
+  if (!targetId) return
   const res = await remove({ id: targetId })
   if (res.data) {
     message.success('对话记录已删除')
-    fetchData()
+    void fetchData()
     return
   }
   message.error('删除失败，请稍后重试')
 }
 
 onMounted(() => {
-  fetchData()
+  void fetchData()
 })
 </script>
 
 <template>
   <div class="manage-page page-shell">
-    <PageHeader title="对话管理" subtitle="管理员可以按应用、用户、消息类型等条件筛选对话历史，并查看详情或删除记录。" />
+    <PageHeader
+      title="对话管理"
+      subtitle="管理员可以按应用、用户、消息类型等条件筛选对话历史，并查看详情或删除记录。"
+    />
 
-    <a-form layout="vertical" class="search-form" @finish="doSearch">
+    <a-form layout="vertical" class="search-form">
       <div class="search-grid">
         <a-form-item label="记录 ID">
           <a-input v-model:value="searchParams.id" allow-clear />
@@ -175,11 +170,13 @@ onMounted(() => {
           <a-input-number v-model:value="searchParams.pageSize" :min="1" style="width: 100%" />
         </a-form-item>
       </div>
+
       <a-form-item label="消息内容">
         <a-input v-model:value="searchParams.message" allow-clear />
       </a-form-item>
+
       <a-space>
-        <a-button type="primary" html-type="submit">搜索</a-button>
+        <a-button type="primary" @click="doSearch">搜索</a-button>
         <a-button @click="resetSearch">重置</a-button>
       </a-space>
     </a-form>
@@ -199,12 +196,15 @@ onMounted(() => {
             {{ messageTypeLabel(record.messageType) }}
           </a-tag>
         </template>
+
         <template v-else-if="column.dataIndex === 'createTime'">
           {{ formatDateTime(record.createTime) }}
         </template>
+
         <template v-else-if="column.dataIndex === 'updateTime'">
           {{ formatDateTime(record.updateTime) }}
         </template>
+
         <template v-else-if="column.key === 'action'">
           <a-space wrap>
             <a-button type="link" @click="openDetail(record)">详情</a-button>
@@ -217,13 +217,7 @@ onMounted(() => {
       </template>
     </a-table>
 
-    <a-modal
-      v-model:open="detailVisible"
-      title="对话详情"
-      width="760px"
-      :footer="null"
-      destroy-on-close
-    >
+    <a-modal v-model:open="detailVisible" title="对话详情" width="760px" :footer="null" destroy-on-close>
       <template v-if="currentRecord">
         <div class="detail-grid">
           <div class="detail-item">

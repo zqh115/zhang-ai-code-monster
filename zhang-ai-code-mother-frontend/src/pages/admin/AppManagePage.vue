@@ -31,7 +31,7 @@ const searchParams = reactive<
 })
 
 const columns = [
-  { title: 'ID', dataIndex: 'id', width: 80, fixed: 'left' },
+  { title: 'ID', dataIndex: 'id', width: 120, fixed: 'left' },
   { title: '应用名称', dataIndex: 'appName', width: 180 },
   { title: '封面', dataIndex: 'cover', width: 120 },
   { title: '初始提示词', dataIndex: 'initPrompt', ellipsis: true },
@@ -51,12 +51,6 @@ const pagination = computed(() => ({
   showSizeChanger: true,
   showTotal: (count: number) => `共 ${count} 条`,
 }))
-
-const handleTableChange = (page: { current?: number; pageSize?: number }) => {
-  searchParams.pageNum = page.current ?? 1
-  searchParams.pageSize = page.pageSize ?? searchParams.pageSize
-  fetchData()
-}
 
 const buildQueryParams = (): API.AppQueryRequest => {
   const params: API.AppQueryRequest = {
@@ -85,7 +79,7 @@ const fetchData = async () => {
       total.value = res.data.data.totalRow ?? 0
       return
     }
-    message.error(`获取应用列表失败，${res.data.message ?? '请稍后重试'}`)
+    message.error(`获取应用列表失败：${res.data.message ?? '请稍后重试'}`)
   } finally {
     loading.value = false
   }
@@ -93,7 +87,7 @@ const fetchData = async () => {
 
 const doSearch = () => {
   searchParams.pageNum = 1
-  fetchData()
+  void fetchData()
 }
 
 const resetSearch = () => {
@@ -107,7 +101,13 @@ const resetSearch = () => {
   searchParams.deployKey = ''
   searchParams.priority = undefined
   searchParams.userId = undefined
-  fetchData()
+  void fetchData()
+}
+
+const handleTableChange = (page: { current?: number; pageSize?: number }) => {
+  searchParams.pageNum = page.current ?? 1
+  searchParams.pageSize = page.pageSize ?? searchParams.pageSize
+  void fetchData()
 }
 
 const openEditPage = (appId?: API.IdType) => {
@@ -126,10 +126,10 @@ const handleDelete = async (appId?: API.IdType) => {
   const res = await deleteAppByAdmin({ id: appId })
   if (res.data.code === 0) {
     message.success('应用已删除')
-    fetchData()
+    void fetchData()
     return
   }
-  message.error(`删除失败，${res.data.message ?? '请稍后重试'}`)
+  message.error(`删除失败：${res.data.message ?? '请稍后重试'}`)
 }
 
 const markFeatured = async (app?: API.AppVO) => {
@@ -142,14 +142,14 @@ const markFeatured = async (app?: API.AppVO) => {
   })
   if (res.data.code === 0) {
     message.success('已设为精选')
-    fetchData()
+    void fetchData()
     return
   }
-  message.error(`设置精选失败，${res.data.message ?? '请稍后重试'}`)
+  message.error(`设置精选失败：${res.data.message ?? '请稍后重试'}`)
 }
 
 onMounted(() => {
-  fetchData()
+  void fetchData()
 })
 </script>
 
@@ -160,7 +160,7 @@ onMounted(() => {
       subtitle="管理员可按除时间外的任意字段筛选应用，并进行编辑、删除和精选操作。"
     />
 
-    <a-form layout="vertical" class="search-form" @finish="doSearch">
+    <a-form layout="vertical" class="search-form">
       <div class="search-grid">
         <a-form-item label="应用 ID">
           <a-input v-model:value="searchParams.id" allow-clear />
@@ -187,11 +187,13 @@ onMounted(() => {
           <a-input-number v-model:value="searchParams.pageSize" :min="1" style="width: 100%" />
         </a-form-item>
       </div>
+
       <a-form-item label="初始提示词">
         <a-input v-model:value="searchParams.initPrompt" allow-clear />
       </a-form-item>
+
       <a-space>
-        <a-button type="primary" html-type="submit">搜索</a-button>
+        <a-button type="primary" @click="doSearch">搜索</a-button>
         <a-button @click="resetSearch">重置</a-button>
       </a-space>
     </a-form>
@@ -216,29 +218,35 @@ onMounted(() => {
           />
           <span v-else>--</span>
         </template>
+
         <template v-else-if="column.dataIndex === 'codeGenType'">
           {{ getAppTypeLabel(record.codeGenType) }}
         </template>
+
         <template v-else-if="column.dataIndex === 'priority'">
           <a-tag :color="record.priority === 99 ? 'gold' : 'blue'">
             {{ record.priority === 99 ? '精选' : record.priority ?? 0 }}
           </a-tag>
         </template>
+
         <template v-else-if="column.dataIndex === 'user'">
           {{ record.user?.userName || `用户 #${record.userId}` }}
         </template>
+
         <template v-else-if="column.dataIndex === 'deployedTime'">
           {{ formatDateTime(record.deployedTime) }}
         </template>
+
         <template v-else-if="column.dataIndex === 'createTime'">
           {{ formatDateTime(record.createTime) }}
         </template>
+
         <template v-else-if="column.key === 'action'">
           <a-space wrap>
             <a-button type="link" @click="openEditPage(record.id)">编辑</a-button>
             <a-button type="link" @click="openChatPage(record.id)">详情</a-button>
             <a-button type="link" @click="markFeatured(record)">精选</a-button>
-            <a-popconfirm title="确认删除该应用吗？" ok-text="删除" cancel-text="取消" @confirm="handleDelete(record.id)">
+            <a-popconfirm title="确认删除这个应用吗？" ok-text="删除" cancel-text="取消" @confirm="handleDelete(record.id)">
               <a-button danger type="link">删除</a-button>
             </a-popconfirm>
           </a-space>
