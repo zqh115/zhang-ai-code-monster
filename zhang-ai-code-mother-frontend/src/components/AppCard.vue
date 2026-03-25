@@ -18,10 +18,10 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  open: [appId?: string]
-  openDeploy: [deployKey?: string]
-  edit: [appId?: string]
-  delete: [appId?: string]
+  (event: 'open', appId?: API.IdType): void
+  (event: 'openDeploy', deployKey?: string): void
+  (event: 'edit', appId?: API.IdType): void
+  (event: 'delete', appId?: API.IdType): void
 }>()
 
 const coverStyle = computed(() => getAppCoverStyle(props.app.appName || String(props.app.id || '0')))

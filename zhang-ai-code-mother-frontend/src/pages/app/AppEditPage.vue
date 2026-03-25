@@ -7,7 +7,7 @@ import AppPreviewPanel from '@/components/AppPreviewPanel.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { getAppVoById, getAppVoByIdByAdmin, updateApp, updateAppByAdmin } from '@/api/appController'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { buildLocalPreviewUrl } from '@/utils/app'
+import { buildLocalPreviewUrl, hasEntityId, isSameEntityId, normalizeEntityId } from '@/utils/app'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,13 +23,19 @@ const formState = reactive<API.AppAdminUpdateRequest>({
   priority: undefined,
 })
 
-const appId = computed(() => String(route.params.id ?? ''))
+const appId = computed(() => normalizeEntityId(route.params.id))
 const isAdmin = computed(() => loginUserStore.isAdmin)
 const previewUrl = computed(() =>
   appDetail.value?.id ? buildLocalPreviewUrl(appDetail.value.id, appDetail.value.codeGenType) : '',
 )
 
 const fetchDetail = async () => {
+  if (!hasEntityId(appId.value)) {
+    message.error('应用 ID 无效')
+    await router.replace('/')
+    return
+  }
+
   loading.value = true
   try {
     const res = isAdmin.value
@@ -38,7 +44,7 @@ const fetchDetail = async () => {
 
     if (res.data.code === 0 && res.data.data) {
       const app = res.data.data
-      if (app.userId && app.userId !== loginUserStore.loginUser.id && !isAdmin.value) {
+      if (hasEntityId(app.userId) && !isSameEntityId(app.userId, loginUserStore.loginUser.id) && !isAdmin.value) {
         message.error('你只能编辑自己的应用')
         await router.replace('/')
         return
@@ -59,7 +65,7 @@ const fetchDetail = async () => {
 }
 
 const handleSubmit = async () => {
-  if (!formState.id) {
+  if (!hasEntityId(formState.id)) {
     return
   }
   if (!formState.appName?.trim()) {
@@ -94,16 +100,13 @@ const handleSubmit = async () => {
 }
 
 onMounted(() => {
-  fetchDetail()
+  void fetchDetail()
 })
 </script>
 
 <template>
   <div class="edit-page page-shell">
-    <PageHeader
-      title="应用信息修改"
-      subtitle="普通用户当前支持修改应用名称；管理员还可以调整封面与优先级。"
-    >
+    <PageHeader title="应用信息修改" subtitle="普通用户当前支持修改应用名称；管理员还可以调整封面与优先级。">
       <template #actions>
         <a-space>
           <a-button @click="router.push({ name: 'appChat', params: { id: appId } })">进入对话页</a-button>

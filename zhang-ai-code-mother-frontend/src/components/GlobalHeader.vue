@@ -5,7 +5,7 @@
         <div class="header-left">
           <img class="logo" src="@/assets/logo.png" alt="Logo" />
           <div>
-            <div class="site-title">一句话 · 呈所想</div>
+            <div class="site-title">一句话 · 即刻成站</div>
             <div class="site-subtitle">对话式创建应用和网站</div>
           </div>
         </div>
@@ -54,9 +54,9 @@
 import { computed, h, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { type MenuProps, message } from 'ant-design-vue'
-import { HomeOutlined, LogoutOutlined } from '@ant-design/icons-vue'
-import { useLoginUserStore } from '@/stores/loginUser.ts'
-import { userLogout } from '@/api/userController.ts'
+import { CommentOutlined, HomeOutlined, LogoutOutlined } from '@ant-design/icons-vue'
+import { useLoginUserStore } from '@/stores/loginUser'
+import { userLogout } from '@/api/userController'
 
 const loginUserStore = useLoginUserStore()
 const router = useRouter()
@@ -80,6 +80,12 @@ const originItems = [
     label: '应用管理',
     title: '应用管理',
   },
+  {
+    key: '/admin/chatHistoryManage',
+    icon: () => h(CommentOutlined),
+    label: '对话管理',
+    title: '对话管理',
+  },
 ]
 
 watch(
@@ -93,25 +99,28 @@ watch(
       selectedKeys.value = ['/admin/appManage']
       return
     }
+    if (newPath.startsWith('/admin/chatHistoryManage')) {
+      selectedKeys.value = ['/admin/chatHistoryManage']
+      return
+    }
     selectedKeys.value = ['/']
   },
   { immediate: true },
 )
 
-const filterMenus = (menus = [] as MenuProps['items']) => {
-  return menus?.filter((menu) => {
+const filterMenus = (menus = [] as MenuProps['items']) =>
+  menus?.filter((menu) => {
     const menuKey = menu?.key as string
     if (menuKey?.startsWith('/admin')) {
       return loginUserStore.isAdmin
     }
     return true
   })
-}
 
 const menuItems = computed<MenuProps['items']>(() => filterMenus(originItems))
 
-const handleMenuClick: MenuProps['onClick'] = (e) => {
-  const key = e.key as string
+const handleMenuClick: MenuProps['onClick'] = (event) => {
+  const key = event.key as string
   selectedKeys.value = [key]
   if (key.startsWith('/')) {
     router.push(key)
@@ -126,9 +135,9 @@ const doLogout = async () => {
     })
     message.success('退出登录成功')
     await router.push('/user/login')
-  } else {
-    message.error(`退出登录失败，${res.data.message ?? '请稍后重试'}`)
+    return
   }
+  message.error(`退出登录失败，${res.data.message ?? '请稍后重试'}`)
 }
 </script>
 

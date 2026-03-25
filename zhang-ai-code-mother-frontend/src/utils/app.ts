@@ -32,7 +32,30 @@ export const APP_DEPLOY_BASE_URL = trimTrailingSlashes(
   import.meta.env.VITE_APP_DEPLOY_BASE_URL ?? getDefaultDeployBaseUrl(),
 )
 
-export function buildLocalPreviewUrl(appId: string, codeGenType?: string) {
+export type EntityId = string | number
+export type EntityIdInput = EntityId | readonly string[]
+
+export function normalizeEntityId(id?: EntityIdInput | null) {
+  if (id === undefined || id === null) {
+    return ''
+  }
+  if (Array.isArray(id)) {
+    return normalizeEntityId(id[0])
+  }
+  return String(id).trim()
+}
+
+export function hasEntityId(id?: EntityIdInput | null) {
+  return normalizeEntityId(id).length > 0
+}
+
+export function isSameEntityId(left?: EntityIdInput | null, right?: EntityIdInput | null) {
+  const normalizedLeft = normalizeEntityId(left)
+  const normalizedRight = normalizeEntityId(right)
+  return normalizedLeft.length > 0 && normalizedLeft === normalizedRight
+}
+
+export function buildLocalPreviewUrl(appId: string | number, codeGenType?: string) {
   if (!codeGenType) {
     return ''
   }

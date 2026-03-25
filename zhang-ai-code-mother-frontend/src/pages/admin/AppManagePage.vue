@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { deleteAppByAdmin, listAppVoByPageByAdmin, updateAppByAdmin } from '@/api/appController'
-import { formatDateTime, getAppTypeLabel } from '@/utils/app'
+import { formatDateTime, getAppTypeLabel, hasEntityId } from '@/utils/app'
 
 const router = useRouter()
 
@@ -12,7 +12,12 @@ const loading = ref(false)
 const data = ref<API.AppVO[]>([])
 const total = ref(0)
 
-const searchParams = reactive<API.AppQueryRequest>({
+const searchParams = reactive<
+  Omit<API.AppQueryRequest, 'id' | 'userId'> & {
+    id?: string
+    userId?: string
+  }
+>({
   pageNum: 1,
   pageSize: 10,
   id: undefined,
@@ -60,13 +65,13 @@ const buildQueryParams = (): API.AppQueryRequest => {
   }
 
   if (searchParams.id?.trim()) params.id = searchParams.id.trim()
+  if (searchParams.userId?.trim()) params.userId = searchParams.userId.trim()
+  if (searchParams.priority !== undefined && searchParams.priority !== null) params.priority = searchParams.priority
   if (searchParams.appName?.trim()) params.appName = searchParams.appName.trim()
   if (searchParams.cover?.trim()) params.cover = searchParams.cover.trim()
   if (searchParams.initPrompt?.trim()) params.initPrompt = searchParams.initPrompt.trim()
   if (searchParams.codeGenType?.trim()) params.codeGenType = searchParams.codeGenType.trim()
   if (searchParams.deployKey?.trim()) params.deployKey = searchParams.deployKey.trim()
-  if (searchParams.userId?.trim()) params.userId = searchParams.userId.trim()
-  if (searchParams.priority !== undefined && searchParams.priority !== null) params.priority = searchParams.priority
 
   return params
 }
@@ -105,19 +110,19 @@ const resetSearch = () => {
   fetchData()
 }
 
-const openEditPage = (appId?: string) => {
-  if (!appId) return
+const openEditPage = (appId?: API.IdType) => {
+  if (!hasEntityId(appId)) return
   const url = router.resolve({ name: 'appEdit', params: { id: appId } }).href
   window.open(url, '_blank')
 }
 
-const openChatPage = async (appId?: string) => {
-  if (!appId) return
+const openChatPage = async (appId?: API.IdType) => {
+  if (!hasEntityId(appId)) return
   await router.push({ name: 'appChat', params: { id: appId } })
 }
 
-const handleDelete = async (appId?: string) => {
-  if (!appId) return
+const handleDelete = async (appId?: API.IdType) => {
+  if (!hasEntityId(appId)) return
   const res = await deleteAppByAdmin({ id: appId })
   if (res.data.code === 0) {
     message.success('应用已删除')
@@ -128,7 +133,7 @@ const handleDelete = async (appId?: string) => {
 }
 
 const markFeatured = async (app?: API.AppVO) => {
-  if (!app?.id) return
+  if (!app || !hasEntityId(app.id)) return
   const res = await updateAppByAdmin({
     id: app.id,
     appName: app.appName,

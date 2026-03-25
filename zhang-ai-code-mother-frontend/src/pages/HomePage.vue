@@ -5,7 +5,7 @@ import { message } from 'ant-design-vue'
 import { addApp, deleteApp, listGoodAppVoByPage, listMyAppVoByPage } from '@/api/appController'
 import AppCard from '@/components/AppCard.vue'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { buildAppDeployUrl, DEFAULT_APP_PAGE_SIZE, MAX_USER_PAGE_SIZE } from '@/utils/app'
+import { buildAppDeployUrl, DEFAULT_APP_PAGE_SIZE, hasEntityId, MAX_USER_PAGE_SIZE } from '@/utils/app'
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
@@ -104,10 +104,6 @@ const handleCreateApp = async (presetPrompt?: string) => {
         params: {
           id: res.data.data,
         },
-        query: {
-          autoSend: '1',
-          prompt: finalPrompt,
-        },
       })
       return
     }
@@ -117,14 +113,13 @@ const handleCreateApp = async (presetPrompt?: string) => {
   }
 }
 
-const openChat = (appId?: string) => {
-  if (!appId) {
+const openChat = (appId?: API.IdType) => {
+  if (!hasEntityId(appId)) {
     return
   }
   router.push({
     name: 'appChat',
     params: { id: appId },
-    query: { view: '1' },
   })
 }
 
@@ -136,8 +131,8 @@ const openDeploy = (deployKey?: string) => {
   window.open(deployUrl, '_blank')
 }
 
-const openEdit = (appId?: string) => {
-  if (!appId) {
+const openEdit = (appId?: API.IdType) => {
+  if (!hasEntityId(appId)) {
     return
   }
   router.push({
@@ -146,8 +141,8 @@ const openEdit = (appId?: string) => {
   })
 }
 
-const handleDelete = async (appId?: string) => {
-  if (!appId) {
+const handleDelete = async (appId?: API.IdType) => {
+  if (!hasEntityId(appId)) {
     return
   }
   const res = await deleteApp({ id: appId })

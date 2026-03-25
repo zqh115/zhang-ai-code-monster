@@ -8,22 +8,28 @@ import { message, Modal } from 'ant-design-vue'
 import { ArrowLeftOutlined, EditOutlined, EyeOutlined, RocketOutlined, SendOutlined } from '@ant-design/icons-vue'
 import AppPreviewPanel from '@/components/AppPreviewPanel.vue'
 import { deployApp, getAppVoById, getAppVoByIdByAdmin } from '@/api/appController'
+import { listAppChatHistory } from '@/api/chatHistoryController'
 import { API_BASE_URL } from '@/request'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { buildLocalPreviewUrl } from '@/utils/app'
+import { buildLocalPreviewUrl, hasEntityId, isSameEntityId, normalizeEntityId } from '@/utils/app'
 import { streamSse } from '@/utils/sse'
 
 type ChatMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
+  createTime?: string
 }
+
+const HISTORY_PAGE_SIZE = 10
 
 const route = useRoute()
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
 
 const loading = ref(false)
+const historyLoading = ref(false)
+const historyLoadingMore = ref(false)
 const sending = ref(false)
 const deploying = ref(false)
 const previewLoading = ref(false)
@@ -31,26 +37,25 @@ const appDetail = ref<API.AppVO>()
 const previewUrl = ref('')
 const inputMessage = ref('')
 const messages = ref<ChatMessage[]>([])
-const hasAutoSent = ref(false)
+const historyTotal = ref(0)
+const hasMoreHistory = ref(false)
+const autoSent = ref(false)
 const messageListRef = ref<HTMLElement>()
 
 let currentAbortController: AbortController | null = null
 
-const appId = computed(() => String(route.params.id ?? ''))
+const appId = computed(() => normalizeEntityId(route.params.id))
 const appName = computed(() => appDetail.value?.appName || `应用 #${appId.value}`)
-const isViewMode = computed(() => route.query.view === '1')
 const isOwner = computed(
-  () => Boolean(appDetail.value?.userId && appDetail.value.userId === loginUserStore.loginUser.id),
+  () => Boolean(appDetail.value?.userId && isSameEntityId(appDetail.value.userId, loginUserStore.loginUser.id)),
 )
 const canManageApp = computed(() => Boolean(loginUserStore.isAdmin || isOwner.value))
 const canChat = computed(() => canManageApp.value)
 const composerTooltip = computed(() => (canChat.value ? '' : '你只能继续编辑自己的应用'))
-const emptyDescription = computed(() => {
-  if (isViewMode.value) {
-    return canChat.value ? '当前是查看模式，你仍然可以继续补充需求优化应用。' : '当前应用暂无可展示的对话记录'
-  }
-  return '发送一句描述，开始生成你的应用'
-})
+const shouldShowPreview = computed(() => historyTotal.value >= 2)
+const emptyDescription = computed(() =>
+  canChat.value ? '发送一句描述，开始生成你的应用' : '当前应用暂无可展示的对话记录',
+)
 
 const highlightLanguageAliases: Record<string, string> = {
   html: 'xml',
@@ -97,24 +102,66 @@ const renderMessageContent = (content: string) => {
   return markdownRenderer.render(normalizedContent)
 }
 
-const scrollToBottom = () => {
-  nextTick(() => {
-    const el = messageListRef.value
-    if (el) {
-      el.scrollTop = el.scrollHeight
-    }
-  })
+const normalizeMessageRole = (messageType?: string): ChatMessage['role'] => {
+  const normalizedType = messageType?.trim().toLowerCase()
+  if (normalizedType === 'user' || normalizedType === 'human') {
+    return 'user'
+  }
+  return 'assistant'
 }
 
+const mapHistoryToMessage = (item: API.ChatHistory): ChatMessage => ({
+  id: `history-${item.id ?? `${item.messageType}-${item.createTime}`}`,
+  role: normalizeMessageRole(item.messageType),
+  content: item.message || '',
+  createTime: item.createTime,
+})
+
+const sortMessagesByCreateTime = (items: ChatMessage[]) =>
+  [...items].sort((left, right) => {
+    const leftTime = left.createTime ? new Date(left.createTime).getTime() : Number.MAX_SAFE_INTEGER
+    const rightTime = right.createTime ? new Date(right.createTime).getTime() : Number.MAX_SAFE_INTEGER
+    return leftTime - rightTime
+  })
+
+const mergeMessages = (incomingMessages: ChatMessage[]) => {
+  const messageMap = new Map<string, ChatMessage>()
+  for (const item of [...messages.value, ...incomingMessages]) {
+    messageMap.set(item.id, item)
+  }
+  messages.value = sortMessagesByCreateTime([...messageMap.values()])
+}
+
+const oldestLoadedCreateTime = computed(() =>
+  sortMessagesByCreateTime(messages.value)
+    .find((item) => item.createTime)
+    ?.createTime,
+)
+
 const syncPreviewUrl = () => {
-  if (!appDetail.value?.id) {
+  if (!appDetail.value?.id || !shouldShowPreview.value) {
     previewUrl.value = ''
     return
   }
   previewUrl.value = buildLocalPreviewUrl(appDetail.value.id, appDetail.value.codeGenType) || ''
 }
 
+const scrollToBottom = () => {
+  nextTick(() => {
+    const element = messageListRef.value
+    if (element) {
+      element.scrollTop = element.scrollHeight
+    }
+  })
+}
+
 const fetchAppDetail = async () => {
+  if (!hasEntityId(appId.value)) {
+    message.error('应用 ID 无效')
+    await router.replace('/')
+    return
+  }
+
   loading.value = true
   try {
     const res = loginUserStore.isAdmin
@@ -136,6 +183,46 @@ const fetchAppDetail = async () => {
   }
 }
 
+const fetchChatHistory = async (loadMore = false) => {
+  if (!hasEntityId(appId.value)) {
+    return
+  }
+
+  if (loadMore) {
+    if (!hasMoreHistory.value || historyLoadingMore.value) {
+      return
+    }
+    historyLoadingMore.value = true
+  } else {
+    historyLoading.value = true
+  }
+
+  try {
+    const res = await listAppChatHistory({
+      appId: appId.value,
+      pageSize: HISTORY_PAGE_SIZE,
+      lastCreateTime: loadMore ? oldestLoadedCreateTime.value : undefined,
+    })
+
+    if (res.data.code === 0 && res.data.data) {
+      const historyMessages = (res.data.data.records ?? []).map(mapHistoryToMessage)
+      mergeMessages(historyMessages)
+      historyTotal.value = res.data.data.totalRow ?? historyTotal.value
+      hasMoreHistory.value = messages.value.length < historyTotal.value
+      syncPreviewUrl()
+      return
+    }
+
+    message.error(`获取对话历史失败，${res.data.message ?? '请稍后重试'}`)
+  } finally {
+    if (loadMore) {
+      historyLoadingMore.value = false
+    } else {
+      historyLoading.value = false
+    }
+  }
+}
+
 const refreshPreview = async () => {
   await fetchAppDetail()
   syncPreviewUrl()
@@ -148,25 +235,28 @@ const sendMessage = async (rawMessage?: string) => {
   }
 
   const content = (rawMessage ?? inputMessage.value).trim()
-  if (!content || sending.value || !appId.value) {
+  if (!content || sending.value || !hasEntityId(appId.value)) {
     return
   }
 
   currentAbortController?.abort()
   currentAbortController = new AbortController()
 
-  messages.value.push({
+  const now = new Date().toISOString()
+  const userMessage: ChatMessage = {
     id: `user-${Date.now()}`,
     role: 'user',
     content,
-  })
-
+    createTime: now,
+  }
   const assistantMessage: ChatMessage = {
     id: `assistant-${Date.now()}`,
     role: 'assistant',
     content: '',
+    createTime: new Date(Date.now() + 1).toISOString(),
   }
-  messages.value.push(assistantMessage)
+
+  mergeMessages([userMessage, assistantMessage])
   inputMessage.value = ''
   sending.value = true
   previewLoading.value = true
@@ -183,49 +273,53 @@ const sendMessage = async (rawMessage?: string) => {
       signal: currentAbortController.signal,
       onMessage: (chunk) => {
         assistantMessage.content += chunk
-        messages.value = [...messages.value]
+        mergeMessages([])
         scrollToBottom()
       },
     })
 
     if (!assistantMessage.content.trim()) {
       assistantMessage.content = '代码生成已完成，你可以继续补充需求来完善这个应用。'
-      messages.value = [...messages.value]
+      mergeMessages([])
     }
 
+    historyTotal.value = Math.max(historyTotal.value + 2, messages.value.length)
+    hasMoreHistory.value = messages.value.length < historyTotal.value
     await refreshPreview()
   } catch (error) {
     if ((error as Error).name !== 'AbortError') {
       assistantMessage.content ||= '生成过程被中断了，请稍后重试。'
-      messages.value = [...messages.value]
+      mergeMessages([])
       message.error(`生成失败，${(error as Error).message || '请稍后重试'}`)
     }
   } finally {
     sending.value = false
     previewLoading.value = false
     currentAbortController = null
+    syncPreviewUrl()
     scrollToBottom()
   }
 }
 
-const tryAutoSend = async () => {
-  if (hasAutoSent.value || isViewMode.value || route.query.autoSend !== '1' || !appDetail.value) {
+const tryAutoSendInitPrompt = async () => {
+  if (autoSent.value || !appDetail.value || !canChat.value) {
+    return
+  }
+  if (historyTotal.value > 0) {
     return
   }
 
-  const promptFromQuery =
-    typeof route.query.prompt === 'string' ? route.query.prompt : appDetail.value.initPrompt || ''
-
-  if (!promptFromQuery.trim()) {
+  const prompt = appDetail.value.initPrompt?.trim()
+  if (!prompt) {
     return
   }
 
-  hasAutoSent.value = true
-  await sendMessage(promptFromQuery)
+  autoSent.value = true
+  await sendMessage(prompt)
 }
 
 const handleDeploy = async () => {
-  if (!canManageApp.value || !appId.value) {
+  if (!canManageApp.value || !hasEntityId(appId.value)) {
     return
   }
 
@@ -243,6 +337,7 @@ const handleDeploy = async () => {
       })
       return
     }
+
     message.error(`部署失败，${res.data.message ?? '请稍后重试'}`)
   } finally {
     deploying.value = false
@@ -262,15 +357,30 @@ const goEditPage = async () => {
   await router.push({ name: 'appEdit', params: { id: appId.value } })
 }
 
+const initializePage = async () => {
+  if (!hasEntityId(appId.value)) {
+    message.error('应用 ID 无效')
+    await router.replace('/')
+    return
+  }
+
+  messages.value = []
+  previewUrl.value = ''
+  historyTotal.value = 0
+  hasMoreHistory.value = false
+  autoSent.value = false
+
+  await fetchAppDetail()
+  await fetchChatHistory()
+  await tryAutoSendInitPrompt()
+  syncPreviewUrl()
+  scrollToBottom()
+}
+
 watch(
   () => route.fullPath,
   async () => {
-    messages.value = []
-    previewUrl.value = ''
-    hasAutoSent.value = false
-    await fetchAppDetail()
-    syncPreviewUrl()
-    await tryAutoSend()
+    await initializePage()
   },
   { immediate: true },
 )
@@ -290,9 +400,7 @@ onBeforeUnmount(() => {
         </a-button>
         <div class="title-block">
           <h1>{{ appName }}</h1>
-          <p>
-            {{ appDetail?.initPrompt || '通过持续对话不断补充需求，你可以逐步完善这个应用。' }}
-          </p>
+          <p>{{ appDetail?.initPrompt || '通过持续对话不断补充需求，你可以逐步完善这个应用。' }}</p>
         </div>
       </div>
 
@@ -311,7 +419,13 @@ onBeforeUnmount(() => {
     <div class="chat-workspace">
       <section class="chat-panel page-shell">
         <div ref="messageListRef" class="message-list">
-          <a-spin :spinning="loading">
+          <div v-if="hasMoreHistory" class="history-load-more">
+            <a-button type="link" :loading="historyLoadingMore" @click="fetchChatHistory(true)">
+              加载更多
+            </a-button>
+          </div>
+
+          <a-spin :spinning="loading || historyLoading">
             <template v-if="messages.length">
               <div
                 v-for="item in messages"
@@ -339,9 +453,7 @@ onBeforeUnmount(() => {
                 :auto-size="{ minRows: 4, maxRows: 8 }"
                 :disabled="!canChat"
                 :placeholder="
-                  canChat
-                    ? '描述越具体，页面结构、文案和风格会越贴合你的需求。'
-                    : '你只能继续编辑自己的应用'
+                  canChat ? '描述越具体，页面结构、文案和风格会越贴合你的需求。' : '你只能继续编辑自己的应用'
                 "
                 @pressEnter.exact.prevent="sendMessage()"
               />
@@ -360,12 +472,11 @@ onBeforeUnmount(() => {
       <AppPreviewPanel
         class="preview-panel"
         title="生成后的网页展示"
-        description="流式返回完成后，右侧会自动刷新并展示最新生成的网站效果。"
         :src="previewUrl"
         :loading="previewLoading"
         iframe-title="应用预览"
         empty-title="等待生成结果"
-        empty-description="发送你的描述后，AI 会一边生成一边回复，网页完成后会在这里自动展示。"
+        empty-description="继续补充你的需求，生成完成后这里会展示对应的网站内容。"
         :full-height="true"
         min-height="520px"
       >
@@ -450,6 +561,12 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   padding: 24px;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0.95));
+}
+
+.history-load-more {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
 }
 
 .message-item {

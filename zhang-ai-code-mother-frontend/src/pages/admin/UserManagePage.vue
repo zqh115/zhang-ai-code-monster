@@ -69,7 +69,7 @@ const resetSearch = () => {
   fetchData()
 }
 
-const doDelete = async (id?: string) => {
+const doDelete = async (id?: number) => {
   if (!id) return
   const res = await deleteUser({ id })
   if (res.data.code === 0) {
@@ -87,10 +87,7 @@ onMounted(() => {
 
 <template>
   <div class="manage-page page-shell">
-    <PageHeader
-      title="用户管理"
-      subtitle="管理员可以在这里按账号或名称查询用户，并进行删除操作。"
-    />
+    <PageHeader title="用户管理" subtitle="管理员可以在这里按账号或名称查询用户，并进行删除操作。" />
 
     <a-form layout="inline" :model="searchParams" class="search-form" @finish="doSearch">
       <a-form-item label="账号">

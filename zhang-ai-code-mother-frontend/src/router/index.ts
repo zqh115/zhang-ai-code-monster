@@ -70,6 +70,16 @@ const router = createRouter({
         requiresAdmin: true,
       },
     },
+    {
+      path: '/admin/chatHistoryManage',
+      name: 'adminChatHistoryManage',
+      component: () => import('@/pages/admin/ChatHistoryManagePage.vue'),
+      meta: {
+        title: '对话管理',
+        showInMenu: true,
+        requiresAdmin: true,
+      },
+    },
   ],
 })
 
