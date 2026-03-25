@@ -35,7 +35,6 @@ const router = createRouter({
       component: () => import('@/pages/app/AppChatPage.vue'),
       meta: {
         title: '应用生成',
-        requiresAuth: true,
         fullWidth: true,
         immersive: true,
         hideGlobalHeader: true,

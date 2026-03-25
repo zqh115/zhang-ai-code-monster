@@ -5,7 +5,7 @@ import { message } from 'ant-design-vue'
 import { addApp, deleteApp, listGoodAppVoByPage, listMyAppVoByPage } from '@/api/appController'
 import AppCard from '@/components/AppCard.vue'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { DEFAULT_APP_PAGE_SIZE, MAX_USER_PAGE_SIZE } from '@/utils/app'
+import { buildAppDeployUrl, DEFAULT_APP_PAGE_SIZE, MAX_USER_PAGE_SIZE } from '@/utils/app'
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
@@ -124,7 +124,16 @@ const openChat = (appId?: string) => {
   router.push({
     name: 'appChat',
     params: { id: appId },
+    query: { view: '1' },
   })
+}
+
+const openDeploy = (deployKey?: string) => {
+  const deployUrl = buildAppDeployUrl(deployKey)
+  if (!deployUrl) {
+    return
+  }
+  window.open(deployUrl, '_blank')
 }
 
 const openEdit = (appId?: string) => {
@@ -246,6 +255,7 @@ onMounted(() => {
                 editable
                 deletable
                 @open="openChat"
+                @open-deploy="openDeploy"
                 @edit="openEdit"
                 @delete="handleDelete"
               />
@@ -305,6 +315,7 @@ onMounted(() => {
               show-owner
               featured
               @open="openChat"
+              @open-deploy="openDeploy"
             />
           </div>
           <a-empty v-else description="暂无精选应用" />
