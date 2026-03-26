@@ -1,5 +1,6 @@
 package com.zqh.zhangaicodemother.service.impl;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -15,11 +16,16 @@ import com.zqh.zhangaicodemother.model.entity.User;
 import com.zqh.zhangaicodemother.model.enums.ChatHistoryMessageTypeEnum;
 import com.zqh.zhangaicodemother.service.AppService;
 import com.zqh.zhangaicodemother.service.ChatHistoryService;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 对话历史 服务层实现。
@@ -27,6 +33,7 @@ import java.time.LocalDateTime;
  * @author <a href="https://github.com/zqh-zhangqiuhui">zqh</a>
  */
 @Service
+@Slf4j
 public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatHistory>  implements ChatHistoryService{
 
     @Resource
@@ -57,6 +64,41 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .eq("appId", appId);
         return this.remove(queryWrapper);
+    }
+
+
+    @Override
+    public int loadChatHistoryMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount){
+        try {
+            QueryWrapper queryWrapper = QueryWrapper.create()
+                    .eq(ChatHistory::getAppId, appId)
+                    .orderBy(ChatHistory::getCreateTime, false)
+                    .limit(1,maxCount);
+            List<ChatHistory> historyList = this.list(queryWrapper);
+            if (CollUtil.isEmpty(historyList)){
+                return 0;
+            }
+            // 反转列表，确保按照时间正序（老的在前，新的在后）
+            historyList= historyList.reversed();
+            // 按照时间顺序添加到对话记忆中
+            int loadedCount = 0;
+            chatMemory.clear();
+            for (ChatHistory history : historyList) {
+                if (history.getMessageType().equals(ChatHistoryMessageTypeEnum.USER.getValue())){
+                    chatMemory.add(UserMessage.from(history.getMessage()));
+                }
+                else if (history.getMessageType().equals(ChatHistoryMessageTypeEnum.AI.getValue())){
+                    chatMemory.add(AiMessage.from(history.getMessage()));
+                }
+                loadedCount++;
+            }
+            log.info("成功为appID:{}添加{}条对话记忆",appId,loadedCount);
+            return loadedCount;
+        } catch (Exception e) {
+            log.error("为appID:{}添加对话记忆失败",appId,e);
+            //加载失败不影响系统运行，只是没有历史上下文
+            return 0;
+        }
     }
 
     /**
@@ -99,6 +141,16 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         return queryWrapper;
     }
 
+
+    /**
+     * 获取应用对话历史列表
+     *
+     * @param appId
+     * @param pageSize
+     * @param lastCreateTime
+     * @param loginUser
+     * @return
+     */
 
     @Override
     public Page<ChatHistory> listAppChatHistoryByPage(Long appId, int pageSize,
