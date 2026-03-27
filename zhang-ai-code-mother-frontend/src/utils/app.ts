@@ -88,13 +88,59 @@ export function formatRelativeDate(dateTime?: string) {
 }
 
 export function getAppTypeLabel(codeGenType?: string) {
-  const typeMap: Record<string, string> = {
-    html: 'HTML',
-    react: 'React',
-    vue: 'Vue',
-    vue_project: 'Vue',
+  return getAppTypeMeta(codeGenType).label
+}
+
+export function getAppTypeMeta(codeGenType?: string) {
+  const typeMap: Record<
+    string,
+    {
+      label: string
+      background: string
+      color: string
+      borderColor: string
+      shadowColor: string
+    }
+  > = {
+    html: {
+      label: '原生 HTML 项目',
+      background: 'linear-gradient(135deg, rgba(255, 247, 237, 0.98), rgba(255, 237, 213, 0.96))',
+      color: '#c2410c',
+      borderColor: 'rgba(249, 115, 22, 0.26)',
+      shadowColor: 'rgba(249, 115, 22, 0.12)',
+    },
+    multi_file: {
+      label: '原生多文件项目',
+      background: 'linear-gradient(135deg, rgba(239, 246, 255, 0.98), rgba(219, 234, 254, 0.96))',
+      color: '#2563eb',
+      borderColor: 'rgba(59, 130, 246, 0.24)',
+      shadowColor: 'rgba(59, 130, 246, 0.14)',
+    },
+    vue: {
+      label: 'Vue 项目',
+      background: 'linear-gradient(135deg, rgba(236, 253, 245, 0.98), rgba(209, 250, 229, 0.96))',
+      color: '#047857',
+      borderColor: 'rgba(16, 185, 129, 0.24)',
+      shadowColor: 'rgba(16, 185, 129, 0.14)',
+    },
+    vue_project: {
+      label: 'Vue 项目',
+      background: 'linear-gradient(135deg, rgba(236, 253, 245, 0.98), rgba(209, 250, 229, 0.96))',
+      color: '#047857',
+      borderColor: 'rgba(16, 185, 129, 0.24)',
+      shadowColor: 'rgba(16, 185, 129, 0.14)',
+    },
   }
-  return typeMap[codeGenType ?? ''] ?? (codeGenType || 'Web')
+
+  return (
+    typeMap[codeGenType ?? ''] ?? {
+      label: codeGenType || 'Web 项目',
+      background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.96))',
+      color: '#475569',
+      borderColor: 'rgba(148, 163, 184, 0.24)',
+      shadowColor: 'rgba(148, 163, 184, 0.12)',
+    }
+  )
 }
 
 export function getAppCoverStyle(seed = '') {

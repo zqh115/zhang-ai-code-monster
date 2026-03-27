@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { DeleteOutlined, EditOutlined, EyeOutlined, LinkOutlined, StarFilled } from '@ant-design/icons-vue'
-import { type EntityId, formatRelativeDate, getAppCoverStyle, getAppTypeLabel } from '@/utils/app'
+import { type EntityId, formatRelativeDate, getAppCoverStyle, getAppTypeMeta } from '@/utils/app'
 
 const props = withDefaults(
   defineProps<{
@@ -29,6 +29,13 @@ const appTitle = computed(() => props.app.appName || '未命名应用')
 const ownerName = computed(() => props.app.user?.userName || '官方精选')
 const ownerInitial = computed(() => ownerName.value.slice(0, 1).toUpperCase())
 const isFeatured = computed(() => props.featured || props.app.priority === 99)
+const appTypeMeta = computed(() => getAppTypeMeta(props.app.codeGenType))
+const appTypeStyle = computed(() => ({
+  background: appTypeMeta.value.background,
+  color: appTypeMeta.value.color,
+  borderColor: appTypeMeta.value.borderColor,
+  boxShadow: `inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 8px 18px ${appTypeMeta.value.shadowColor}`,
+}))
 const placeholderDescription = computed(
   () => props.app.initPrompt || '等待更多描述来丰富页面内容和交互结构。',
 )
@@ -39,7 +46,7 @@ const placeholderDescription = computed(
     <div class="app-card__cover" :style="!app.cover ? coverStyle : undefined">
       <img v-if="app.cover" :src="app.cover" :alt="appTitle" class="app-card__image" />
       <div v-else class="app-card__placeholder">
-        <div class="placeholder-chip">{{ getAppTypeLabel(app.codeGenType) }}</div>
+        <div class="placeholder-chip" :style="appTypeStyle">{{ appTypeMeta.label }}</div>
         <div class="placeholder-title">{{ appTitle }}</div>
         <div class="placeholder-desc">{{ placeholderDescription }}</div>
       </div>
@@ -58,7 +65,7 @@ const placeholderDescription = computed(
           </div>
 
           <div class="app-card__badges">
-            <a-tag color="processing">{{ getAppTypeLabel(app.codeGenType) }}</a-tag>
+            <span class="app-type-badge" :style="appTypeStyle">{{ appTypeMeta.label }}</span>
             <a-tag v-if="isFeatured" color="gold">
               <template #icon>
                 <StarFilled />
@@ -144,12 +151,12 @@ const placeholderDescription = computed(
 
 .placeholder-chip {
   width: fit-content;
-  padding: 4px 10px;
+  padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
-  color: #0f172a;
+  border: 1px solid transparent;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .placeholder-title {
@@ -220,6 +227,18 @@ const placeholderDescription = computed(
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.app-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .app-card__tags {
