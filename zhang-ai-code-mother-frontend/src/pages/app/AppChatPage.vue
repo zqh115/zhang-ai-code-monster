@@ -62,6 +62,7 @@ const messages = ref<ChatMessage[]>([])
 const historyTotal = ref(0)
 const hasMoreHistory = ref(false)
 const autoSent = ref(false)
+const historyInitialized = ref(false)
 const messageListRef = ref<HTMLElement>()
 
 let currentAbortController: AbortController | null = null
@@ -290,6 +291,10 @@ const fetchChatHistory = async (loadMore = false) => {
 
     message.error(`获取对话历史失败：${res.data.message ?? '请稍后重试'}`)
   } finally {
+    if (!loadMore) {
+      historyInitialized.value = true
+    }
+
     if (loadMore) {
       historyLoadingMore.value = false
     } else {
@@ -415,7 +420,15 @@ const continueLatestMessage = async (pendingMessage: ChatMessage) => {
 }
 
 const tryAutoSendInitPrompt = async () => {
-  if (autoSent.value || !appDetail.value || !canChat.value) {
+  if (
+    autoSent.value ||
+    !historyInitialized.value ||
+    !appDetail.value ||
+    !canChat.value ||
+    loading.value ||
+    historyLoading.value ||
+    sending.value
+  ) {
     return
   }
 
@@ -434,6 +447,14 @@ const tryAutoSendInitPrompt = async () => {
     autoSent.value = true
     await continueLatestMessage(latestUserOnlyMessage.value)
   }
+}
+
+const ensureLoginUserReady = async () => {
+  if (loginUserStore.loginUser.id || loginUserStore.isAdmin) {
+    return
+  }
+
+  await loginUserStore.fetchLoginUser()
 }
 
 const parseDownloadFileName = (contentDisposition?: string) => {
@@ -592,7 +613,9 @@ const initializePage = async () => {
   historyTotal.value = 0
   hasMoreHistory.value = false
   autoSent.value = false
+  historyInitialized.value = false
 
+  await ensureLoginUserReady()
   await fetchAppDetail()
   await fetchChatHistory()
   await tryAutoSendInitPrompt()
@@ -606,6 +629,19 @@ watch(
     void initializePage()
   },
   { immediate: true },
+)
+
+watch(
+  [
+    () => loginUserStore.loginUser.id,
+    () => canChat.value,
+    () => appDetail.value?.id,
+    () => historyTotal.value,
+    () => latestUserOnlyMessage.value?.id,
+  ],
+  () => {
+    void tryAutoSendInitPrompt()
+  },
 )
 
 onBeforeUnmount(() => {

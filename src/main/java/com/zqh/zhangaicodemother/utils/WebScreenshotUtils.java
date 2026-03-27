@@ -95,12 +95,13 @@ public class WebScreenshotUtils {
 
 
     /**
-     * 初始化 Chrome 浏览器驱动
+     * 初始化 firefox 浏览器驱动
      */
     private static WebDriver initChromeDriver(int width, int height) {
         try {
             // 自动管理 ChromeDriver
-            WebDriverManager.chromedriver().setup();
+//            WebDriverManager.chromedriver().setup();
+            WebDriverManager.firefoxdriver().setup();
             // 配置 Chrome 选项
             ChromeOptions options = new ChromeOptions();
             // 无头模式
@@ -125,8 +126,8 @@ public class WebScreenshotUtils {
             driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
             return driver;
         } catch (Exception e) {
-            log.error("初始化 Chrome 浏览器失败", e);
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "初始化 Chrome 浏览器失败");
+            log.error("初始化 firefox 浏览器失败", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "初始化 firefox 浏览器失败");
         }
     }
 
