@@ -2,7 +2,7 @@ package com.zqh.zhangaicodemother.ai;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.zqh.zhangaicodemother.ai.tools.FileWriteTool;
+import com.zqh.zhangaicodemother.ai.tools.*;
 import com.zqh.zhangaicodemother.exception.BusinessException;
 import com.zqh.zhangaicodemother.exception.ErrorCode;
 import com.zqh.zhangaicodemother.model.enums.CodeGenTypeEnum;
@@ -41,6 +41,8 @@ public class AiCodeGeneratorServiceFactory {
     private ChatHistoryServiceImpl chatHistoryService;
     @Resource
     private StreamingChatModel reasoningStreamingChatModel;
+    @Resource
+    private ToolManager toolManager;
 
 
     /**
@@ -97,7 +99,7 @@ public class AiCodeGeneratorServiceFactory {
             case VUE_PROJECT -> AiServices.builder(AiCodeGeneratorService.class)
                     .streamingChatModel(reasoningStreamingChatModel)
                     .chatMemoryProvider(memoryId -> chatMemory)
-                    .tools(new FileWriteTool())
+                    .tools(toolManager.getAllTools())
                     //处理工具调用幻觉问题
                     .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
                             toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
