@@ -1,15 +1,23 @@
 <script setup lang="ts">
+import axios from 'axios'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import hljs from 'highlight.js'
 import MarkdownIt from 'markdown-it'
 import 'highlight.js/styles/github-dark.css'
 import { message, Modal } from 'ant-design-vue'
-import { ArrowLeftOutlined, EditOutlined, EyeOutlined, RocketOutlined, SendOutlined } from '@ant-design/icons-vue'
+import {
+  ArrowLeftOutlined,
+  DownloadOutlined,
+  EditOutlined,
+  EyeOutlined,
+  RocketOutlined,
+  SendOutlined,
+} from '@ant-design/icons-vue'
 import AppPreviewPanel from '@/components/AppPreviewPanel.vue'
 import { deployApp, getAppVoById, getAppVoByIdByAdmin } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
-import { API_BASE_URL } from '@/request'
+import request from '@/request'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { buildLocalPreviewUrl, hasEntityId, isSameEntityId, normalizeEntityId } from '@/utils/app'
 import { streamSse } from '@/utils/sse'
@@ -31,6 +39,7 @@ const loading = ref(false)
 const historyLoading = ref(false)
 const historyLoadingMore = ref(false)
 const sending = ref(false)
+const downloadingCode = ref(false)
 const deploying = ref(false)
 const previewLoading = ref(false)
 const appDetail = ref<API.AppVO>()
@@ -46,13 +55,17 @@ let currentAbortController: AbortController | null = null
 
 const appId = computed(() => normalizeEntityId(route.params.id))
 const appName = computed(() => appDetail.value?.appName || `应用 #${appId.value}`)
-const isOwner = computed(
-  () => Boolean(appDetail.value?.userId && isSameEntityId(appDetail.value.userId, loginUserStore.loginUser.id)),
+const isOwner = computed(() =>
+  Boolean(appDetail.value?.userId && isSameEntityId(appDetail.value.userId, loginUserStore.loginUser.id)),
 )
 const canManageApp = computed(() => Boolean(loginUserStore.isAdmin || isOwner.value))
 const canChat = computed(() => canManageApp.value)
-const composerTooltip = computed(() => (canChat.value ? '' : '你只能继续编辑自己的应用'))
 const shouldShowPreview = computed(() => historyTotal.value >= 2)
+const canDownloadCode = computed(() => canManageApp.value && Boolean(previewUrl.value))
+const composerTooltip = computed(() => (canChat.value ? '' : '你只能继续编辑自己的应用'))
+const downloadTooltip = computed(() =>
+  canDownloadCode.value ? '' : '只有已经生成可访问预览地址的应用才允许下载代码',
+)
 const emptyDescription = computed(() =>
   canChat.value ? '发送一句描述，开始生成你的应用' : '当前应用暂无可展示的对话记录',
 )
@@ -138,6 +151,18 @@ const oldestLoadedCreateTime = computed(() =>
     ?.createTime,
 )
 
+const latestUserOnlyMessage = computed(() => {
+  if (historyTotal.value !== 1 || messages.value.length !== 1) {
+    return undefined
+  }
+
+  const [onlyMessage] = messages.value
+  if (onlyMessage?.role !== 'user' || !onlyMessage.content.trim()) {
+    return undefined
+  }
+  return onlyMessage
+})
+
 const syncPreviewUrl = () => {
   if (!appDetail.value?.id || !shouldShowPreview.value) {
     previewUrl.value = ''
@@ -153,6 +178,16 @@ const scrollToBottom = () => {
       element.scrollTop = element.scrollHeight
     }
   })
+}
+
+const createAssistantMessage = (baseCreateTime?: string): ChatMessage => {
+  const baseTimestamp = baseCreateTime ? new Date(baseCreateTime).getTime() : Date.now()
+  return {
+    id: `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    role: 'assistant',
+    content: '',
+    createTime: new Date(baseTimestamp + 1).toISOString(),
+  }
 }
 
 const fetchAppDetail = async () => {
@@ -173,10 +208,10 @@ const fetchAppDetail = async () => {
       return
     }
 
-    message.error(`获取应用详情失败，${res.data.message ?? '请稍后重试'}`)
+    message.error(`获取应用详情失败：${res.data.message ?? '请稍后重试'}`)
     await router.replace('/')
   } catch (error) {
-    message.error(`获取应用详情失败，${(error as Error).message || '请稍后重试'}`)
+    message.error(`获取应用详情失败：${(error as Error).message || '请稍后重试'}`)
     await router.replace('/')
   } finally {
     loading.value = false
@@ -213,7 +248,7 @@ const fetchChatHistory = async (loadMore = false) => {
       return
     }
 
-    message.error(`获取对话历史失败，${res.data.message ?? '请稍后重试'}`)
+    message.error(`获取对话历史失败：${res.data.message ?? '请稍后重试'}`)
   } finally {
     if (loadMore) {
       historyLoadingMore.value = false
@@ -226,6 +261,36 @@ const fetchChatHistory = async (loadMore = false) => {
 const refreshPreview = async () => {
   await fetchAppDetail()
   syncPreviewUrl()
+}
+
+const streamAssistantReply = async (
+  content: string,
+  assistantMessage: ChatMessage,
+  historyIncrement: number,
+) => {
+  const search = new URLSearchParams({
+    appId: String(appId.value),
+    message: content,
+  })
+
+  await streamSse({
+    url: `/app/chat/gen/code?${search.toString()}`,
+    signal: currentAbortController!.signal,
+    onMessage: (chunk) => {
+      assistantMessage.content += chunk
+      mergeMessages([])
+      scrollToBottom()
+    },
+  })
+
+  if (!assistantMessage.content.trim()) {
+    assistantMessage.content = '代码生成已完成，你可以继续补充需求来完善这个应用。'
+    mergeMessages([])
+  }
+
+  historyTotal.value = Math.max(historyTotal.value + historyIncrement, messages.value.length)
+  hasMoreHistory.value = messages.value.length < historyTotal.value
+  await refreshPreview()
 }
 
 const sendMessage = async (rawMessage?: string) => {
@@ -244,17 +309,12 @@ const sendMessage = async (rawMessage?: string) => {
 
   const now = new Date().toISOString()
   const userMessage: ChatMessage = {
-    id: `user-${Date.now()}`,
+    id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     role: 'user',
     content,
     createTime: now,
   }
-  const assistantMessage: ChatMessage = {
-    id: `assistant-${Date.now()}`,
-    role: 'assistant',
-    content: '',
-    createTime: new Date(Date.now() + 1).toISOString(),
-  }
+  const assistantMessage = createAssistantMessage(now)
 
   mergeMessages([userMessage, assistantMessage])
   inputMessage.value = ''
@@ -263,34 +323,44 @@ const sendMessage = async (rawMessage?: string) => {
   scrollToBottom()
 
   try {
-    const search = new URLSearchParams({
-      appId: String(appId.value),
-      message: content,
-    })
-
-    await streamSse({
-      url: `${API_BASE_URL}/app/chat/gen/code?${search.toString()}`,
-      signal: currentAbortController.signal,
-      onMessage: (chunk) => {
-        assistantMessage.content += chunk
-        mergeMessages([])
-        scrollToBottom()
-      },
-    })
-
-    if (!assistantMessage.content.trim()) {
-      assistantMessage.content = '代码生成已完成，你可以继续补充需求来完善这个应用。'
-      mergeMessages([])
-    }
-
-    historyTotal.value = Math.max(historyTotal.value + 2, messages.value.length)
-    hasMoreHistory.value = messages.value.length < historyTotal.value
-    await refreshPreview()
+    await streamAssistantReply(content, assistantMessage, 2)
   } catch (error) {
     if ((error as Error).name !== 'AbortError') {
       assistantMessage.content ||= '生成过程被中断了，请稍后重试。'
       mergeMessages([])
-      message.error(`生成失败，${(error as Error).message || '请稍后重试'}`)
+      message.error(`生成失败：${(error as Error).message || '请稍后重试'}`)
+    }
+  } finally {
+    sending.value = false
+    previewLoading.value = false
+    currentAbortController = null
+    syncPreviewUrl()
+    scrollToBottom()
+  }
+}
+
+const continueLatestMessage = async (pendingMessage: ChatMessage) => {
+  const content = pendingMessage.content.trim()
+  if (!content || sending.value || !hasEntityId(appId.value)) {
+    return
+  }
+
+  currentAbortController?.abort()
+  currentAbortController = new AbortController()
+
+  const assistantMessage = createAssistantMessage(pendingMessage.createTime)
+  mergeMessages([assistantMessage])
+  sending.value = true
+  previewLoading.value = true
+  scrollToBottom()
+
+  try {
+    await streamAssistantReply(content, assistantMessage, 1)
+  } catch (error) {
+    if ((error as Error).name !== 'AbortError') {
+      assistantMessage.content ||= '生成过程被中断了，请稍后重试。'
+      mergeMessages([])
+      message.error(`生成失败：${(error as Error).message || '请稍后重试'}`)
     }
   } finally {
     sending.value = false
@@ -305,17 +375,115 @@ const tryAutoSendInitPrompt = async () => {
   if (autoSent.value || !appDetail.value || !canChat.value) {
     return
   }
-  if (historyTotal.value > 0) {
+
+  if (historyTotal.value === 0) {
+    const prompt = appDetail.value.initPrompt?.trim()
+    if (!prompt) {
+      return
+    }
+    autoSent.value = true
+    await sendMessage(prompt)
     return
   }
 
-  const prompt = appDetail.value.initPrompt?.trim()
-  if (!prompt) {
+  if (latestUserOnlyMessage.value) {
+    autoSent.value = true
+    await continueLatestMessage(latestUserOnlyMessage.value)
+  }
+}
+
+const parseDownloadFileName = (contentDisposition?: string) => {
+  const fallbackName = `${appId.value || 'app'}.zip`
+  if (!contentDisposition) {
+    return fallbackName
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1])
+  }
+
+  const quotedMatch = contentDisposition.match(/filename\s*=\s*"([^"]+)"/i)
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1]
+  }
+
+  const plainMatch = contentDisposition.match(/filename\s*=\s*([^;]+)/i)
+  if (plainMatch?.[1]) {
+    return plainMatch[1].trim()
+  }
+
+  return fallbackName
+}
+
+const extractErrorMessageFromBlob = async (blob?: Blob) => {
+  if (!blob) {
+    return ''
+  }
+
+  const text = await blob.text()
+  if (!text) {
+    return ''
+  }
+
+  try {
+    const parsed = JSON.parse(text) as { message?: string }
+    return parsed.message || text
+  } catch {
+    return text
+  }
+}
+
+const triggerBlobDownload = (blob: Blob, fileName: string) => {
+  const objectUrl = window.URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  window.URL.revokeObjectURL(objectUrl)
+}
+
+const handleDownloadCode = async () => {
+  if (!canManageApp.value || !hasEntityId(appId.value)) {
+    return
+  }
+  if (!previewUrl.value) {
+    message.warning('请先生成可访问的应用预览后再下载代码')
     return
   }
 
-  autoSent.value = true
-  await sendMessage(prompt)
+  downloadingCode.value = true
+  try {
+    const response = await request.get<Blob>(`/app/download/${appId.value}`, {
+      responseType: 'blob',
+      headers: {
+        Accept: 'application/zip',
+      },
+    })
+
+    const contentType = String(response.headers['content-type'] ?? '')
+    if (!contentType.includes('application/zip')) {
+      const errorMessage = await extractErrorMessageFromBlob(response.data)
+      throw new Error(errorMessage || '下载内容不是有效的 ZIP 包')
+    }
+
+    const fileName = parseDownloadFileName(String(response.headers['content-disposition'] ?? ''))
+    const zipBlob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: contentType })
+    triggerBlobDownload(zipBlob, fileName)
+    message.success('代码包开始下载')
+  } catch (error) {
+    let errorMessage = (error as Error).message || '请稍后重试'
+
+    if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+      errorMessage = (await extractErrorMessageFromBlob(error.response.data)) || errorMessage
+    }
+
+    message.error(`下载代码失败：${errorMessage}`)
+  } finally {
+    downloadingCode.value = false
+  }
 }
 
 const handleDeploy = async () => {
@@ -338,7 +506,7 @@ const handleDeploy = async () => {
       return
     }
 
-    message.error(`部署失败，${res.data.message ?? '请稍后重试'}`)
+    message.error(`部署失败：${res.data.message ?? '请稍后重试'}`)
   } finally {
     deploying.value = false
   }
@@ -379,8 +547,8 @@ const initializePage = async () => {
 
 watch(
   () => route.fullPath,
-  async () => {
-    await initializePage()
+  () => {
+    void initializePage()
   },
   { immediate: true },
 )
@@ -409,6 +577,14 @@ onBeforeUnmount(() => {
           <EditOutlined />
           编辑信息
         </a-button>
+
+        <a-tooltip :title="downloadTooltip" :disabled="canDownloadCode">
+          <a-button :loading="downloadingCode" :disabled="!canDownloadCode" @click="handleDownloadCode">
+            <DownloadOutlined />
+            下载代码
+          </a-button>
+        </a-tooltip>
+
         <a-button type="primary" :loading="deploying" @click="handleDeploy">
           <RocketOutlined />
           部署应用
@@ -434,10 +610,7 @@ onBeforeUnmount(() => {
               >
                 <div class="message-bubble">
                   <div class="message-role">{{ item.role === 'user' ? '我' : 'AI' }}</div>
-                  <div
-                    class="message-content"
-                    v-html="renderMessageContent(item.content || '正在生成中...')"
-                  ></div>
+                  <div class="message-content" v-html="renderMessageContent(item.content || '正在生成中...')"></div>
                 </div>
               </div>
             </template>
@@ -452,9 +625,7 @@ onBeforeUnmount(() => {
                 v-model:value="inputMessage"
                 :auto-size="{ minRows: 4, maxRows: 8 }"
                 :disabled="!canChat"
-                :placeholder="
-                  canChat ? '描述越具体，页面结构、文案和风格会越贴合你的需求。' : '你只能继续编辑自己的应用'
-                "
+                :placeholder="canChat ? '描述越具体，页面结构、文案和风格会越贴合你的需求。' : '你只能继续编辑自己的应用'"
                 @pressEnter.exact.prevent="sendMessage()"
               />
             </div>

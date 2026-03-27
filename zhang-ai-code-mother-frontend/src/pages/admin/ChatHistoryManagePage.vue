@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { listAllChatHistoryByPageForAdmin, remove } from '@/api/chatHistoryController'
-import { formatDateTime, hasEntityId, normalizeEntityId } from '@/utils/app'
+import { formatDateTime, type EntityId, hasEntityId, normalizeEntityId } from '@/utils/app'
 
 const router = useRouter()
 
@@ -120,12 +120,12 @@ const openDetail = (record: API.ChatHistory) => {
   detailVisible.value = true
 }
 
-const openAppChat = async (appId?: API.IdType) => {
+const openAppChat = async (appId?: EntityId) => {
   if (!hasEntityId(appId)) return
   await router.push({ name: 'appChat', params: { id: String(appId) } })
 }
 
-const handleDelete = async (id?: API.IdType) => {
+const handleDelete = async (id?: EntityId) => {
   const targetId = normalizeEntityId(id)
   if (!targetId) return
   const res = await remove({ id: targetId })

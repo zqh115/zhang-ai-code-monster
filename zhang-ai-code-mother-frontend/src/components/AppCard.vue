@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { DeleteOutlined, EditOutlined, EyeOutlined, LinkOutlined, StarFilled } from '@ant-design/icons-vue'
-import { formatRelativeDate, getAppCoverStyle, getAppTypeLabel } from '@/utils/app'
+import { type EntityId, formatRelativeDate, getAppCoverStyle, getAppTypeLabel } from '@/utils/app'
 
 const props = withDefaults(
   defineProps<{
@@ -18,10 +18,10 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  (event: 'open', appId?: API.IdType): void
+  (event: 'open', appId?: EntityId): void
   (event: 'openDeploy', deployKey?: string): void
-  (event: 'edit', appId?: API.IdType): void
-  (event: 'delete', appId?: API.IdType): void
+  (event: 'edit', appId?: EntityId): void
+  (event: 'delete', appId?: EntityId): void
 }>()
 
 const coverStyle = computed(() => getAppCoverStyle(props.app.appName || String(props.app.id || '0')))

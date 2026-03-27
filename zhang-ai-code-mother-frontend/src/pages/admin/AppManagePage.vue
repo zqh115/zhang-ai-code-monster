@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { deleteAppByAdmin, listAppVoByPageByAdmin, updateAppByAdmin } from '@/api/appController'
-import { formatDateTime, getAppTypeLabel, hasEntityId } from '@/utils/app'
+import { formatDateTime, getAppTypeLabel, type EntityId, hasEntityId } from '@/utils/app'
 
 const router = useRouter()
 
@@ -110,18 +110,18 @@ const handleTableChange = (page: { current?: number; pageSize?: number }) => {
   void fetchData()
 }
 
-const openEditPage = (appId?: API.IdType) => {
+const openEditPage = (appId?: EntityId) => {
   if (!hasEntityId(appId)) return
   const url = router.resolve({ name: 'appEdit', params: { id: appId } }).href
   window.open(url, '_blank')
 }
 
-const openChatPage = async (appId?: API.IdType) => {
+const openChatPage = async (appId?: EntityId) => {
   if (!hasEntityId(appId)) return
   await router.push({ name: 'appChat', params: { id: appId } })
 }
 
-const handleDelete = async (appId?: API.IdType) => {
+const handleDelete = async (appId?: EntityId) => {
   if (!hasEntityId(appId)) return
   const res = await deleteAppByAdmin({ id: appId })
   if (res.data.code === 0) {

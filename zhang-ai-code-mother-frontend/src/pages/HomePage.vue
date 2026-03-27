@@ -5,7 +5,7 @@ import { message } from 'ant-design-vue'
 import { addApp, deleteApp, listGoodAppVoByPage, listMyAppVoByPage } from '@/api/appController'
 import AppCard from '@/components/AppCard.vue'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { buildAppDeployUrl, DEFAULT_APP_PAGE_SIZE, hasEntityId, MAX_USER_PAGE_SIZE } from '@/utils/app'
+import { buildAppDeployUrl, DEFAULT_APP_PAGE_SIZE, type EntityId, hasEntityId, MAX_USER_PAGE_SIZE } from '@/utils/app'
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
@@ -113,7 +113,7 @@ const handleCreateApp = async (presetPrompt?: string) => {
   }
 }
 
-const openChat = (appId?: API.IdType) => {
+const openChat = (appId?: EntityId) => {
   if (!hasEntityId(appId)) {
     return
   }
@@ -131,7 +131,7 @@ const openDeploy = (deployKey?: string) => {
   window.open(deployUrl, '_blank')
 }
 
-const openEdit = (appId?: API.IdType) => {
+const openEdit = (appId?: EntityId) => {
   if (!hasEntityId(appId)) {
     return
   }
@@ -141,7 +141,7 @@ const openEdit = (appId?: API.IdType) => {
   })
 }
 
-const handleDelete = async (appId?: API.IdType) => {
+const handleDelete = async (appId?: EntityId) => {
   if (!hasEntityId(appId)) {
     return
   }

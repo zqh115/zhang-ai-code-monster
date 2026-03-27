@@ -362,6 +362,7 @@ public class AppController {
         // 2. 查询应用信息
         App app = appService.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        ThrowUtils.throwIf(app.getDeployKey() == null, ErrorCode.NOT_FOUND_ERROR, "部署密钥不存在");
         // 3. 权限校验：只有应用创建者可以下载代码
         User loginUser = userService.getLoginUser(request);
         if (!app.getUserId().equals(loginUser.getId())) {

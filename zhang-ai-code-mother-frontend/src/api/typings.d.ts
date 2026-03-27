@@ -1,6 +1,4 @@
 declare namespace API {
-  type IdType = string | number
-
   type AppAddRequest = {
     initPrompt?: string
   }
@@ -142,6 +140,10 @@ declare namespace API {
 
   type DeleteRequest = {
     id?: IdType
+  }
+
+  type downloadAppCodeParams = {
+    appId: IdType
   }
 
   type getAppVOByIdByAdminParams = {
