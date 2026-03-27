@@ -59,7 +59,10 @@ export function buildLocalPreviewUrl(appId: string | number, codeGenType?: strin
   if (!codeGenType) {
     return ''
   }
-  return `${APP_PREVIEW_BASE_URL}/static/${codeGenType}_${appId}/?t=${Date.now()}`
+
+  const basePreviewUrl = `${APP_PREVIEW_BASE_URL}/static/${codeGenType}_${appId}/`
+  const previewEntry = codeGenType === 'vue_project' ? 'dist/index.html' : ''
+  return `${basePreviewUrl}${previewEntry}?t=${Date.now()}`
 }
 
 export function buildAppDeployUrl(deployKey?: string) {
