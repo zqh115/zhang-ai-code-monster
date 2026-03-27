@@ -110,8 +110,10 @@ public class AiCodeGeneratorFacade {
                         sink.next(JSONUtil.toJsonStr(aiResponseMessage));
                     })
                     //推理逻辑
-                    .onPartialThinking((PartialThinking partialThinking) ->
-                            log.info("partialThinking: " + partialThinking.text()))
+                    .onPartialThinking((PartialThinking partialThinking) ->{
+                        log.info("partialThinking: " + partialThinking);
+                        sink.next(JSONUtil.toJsonStr(partialThinking));
+                            })
 //                    .onPartialToolExecutionRequest((index, toolExecutionRequest) -> {
 //                        ToolRequestMessage toolRequestMessage = new ToolRequestMessage(toolExecutionRequest);
 //                        sink.next(JSONUtil.toJsonStr(toolRequestMessage));
