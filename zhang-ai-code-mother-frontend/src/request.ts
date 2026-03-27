@@ -1,8 +1,19 @@
 import axios from 'axios'
 import { message } from 'ant-design-vue'
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8123/api'
-export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '')
+const DEFAULT_API_BASE_URL = '/api'
+
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL
+
+export const API_ORIGIN = (() => {
+  if (/^https?:\/\//i.test(API_BASE_URL)) {
+    return API_BASE_URL.replace(/\/api\/?$/, '')
+  }
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+  return ''
+})()
 
 const myAxios = axios.create({
   baseURL: API_BASE_URL,

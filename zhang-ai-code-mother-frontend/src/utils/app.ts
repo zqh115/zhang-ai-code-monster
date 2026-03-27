@@ -11,9 +11,35 @@ export const MAX_USER_PAGE_SIZE = 20
 
 const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, '')
 
+const isLoopbackHostname = (hostname: string) => ['localhost', '127.0.0.1', '::1'].includes(hostname)
+
 const ensureApiSuffix = (value: string) => {
   const normalizedValue = trimTrailingSlashes(value)
   return normalizedValue.endsWith('/api') ? normalizedValue : `${normalizedValue}/api`
+}
+
+const preferSameOriginApiBaseUrl = (value: string) => {
+  if (typeof window === 'undefined') {
+    return value
+  }
+
+  try {
+    const parsedUrl = new URL(value, window.location.origin)
+    const isApiPath = parsedUrl.pathname === '/api' || parsedUrl.pathname.endsWith('/api')
+    const canProxyThroughCurrentOrigin =
+      isApiPath &&
+      (parsedUrl.origin === window.location.origin ||
+        parsedUrl.hostname === window.location.hostname ||
+        (isLoopbackHostname(parsedUrl.hostname) && isLoopbackHostname(window.location.hostname)))
+
+    if (canProxyThroughCurrentOrigin) {
+      return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
+    }
+
+    return value
+  } catch {
+    return value
+  }
 }
 
 const getDefaultDeployBaseUrl = () => {
@@ -25,7 +51,7 @@ const getDefaultDeployBaseUrl = () => {
 }
 
 export const APP_PREVIEW_BASE_URL = ensureApiSuffix(
-  import.meta.env.VITE_APP_PREVIEW_BASE_URL ?? API_BASE_URL ?? API_ORIGIN,
+  preferSameOriginApiBaseUrl(import.meta.env.VITE_APP_PREVIEW_BASE_URL ?? API_BASE_URL ?? API_ORIGIN),
 )
 
 export const APP_DEPLOY_BASE_URL = trimTrailingSlashes(

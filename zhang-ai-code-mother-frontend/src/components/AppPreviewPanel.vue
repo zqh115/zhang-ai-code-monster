@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -25,8 +25,24 @@ const props = withDefaults(
   },
 )
 
+const emit = defineEmits<{
+  (event: 'frameLoad', iframe: HTMLIFrameElement): void
+}>()
+
+const iframeRef = ref<HTMLIFrameElement | null>(null)
+
 const panelClass = computed(() => ['app-preview-panel page-shell', { 'app-preview-panel--full': props.fullHeight }])
 const contentStyle = computed(() => ({ minHeight: props.minHeight }))
+
+const handleFrameLoad = () => {
+  if (iframeRef.value) {
+    emit('frameLoad', iframeRef.value)
+  }
+}
+
+defineExpose({
+  iframeRef,
+})
 </script>
 
 <template>
@@ -45,10 +61,12 @@ const contentStyle = computed(() => ({ minHeight: props.minHeight }))
       <a-spin :spinning="loading">
         <iframe
           v-if="src"
+          ref="iframeRef"
           :src="src"
           :title="iframeTitle"
           class="app-preview-panel__frame"
           :style="contentStyle"
+          @load="handleFrameLoad"
         />
         <div v-else class="app-preview-panel__empty" :style="contentStyle">
           <h3>{{ emptyTitle }}</h3>

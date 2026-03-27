@@ -11,13 +11,15 @@ import {
   DownloadOutlined,
   EditOutlined,
   EyeOutlined,
+  HighlightOutlined,
   RocketOutlined,
   SendOutlined,
 } from '@ant-design/icons-vue'
 import AppPreviewPanel from '@/components/AppPreviewPanel.vue'
+import { useVisualEditing } from '@/composables/useVisualEditing'
 import { deployApp, getAppVoById, getAppVoByIdByAdmin } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
-import request from '@/request'
+import request, { API_BASE_URL } from '@/request'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { buildLocalPreviewUrl, hasEntityId, isSameEntityId, normalizeEntityId } from '@/utils/app'
 import { streamSse } from '@/utils/sse'
@@ -34,6 +36,17 @@ const HISTORY_PAGE_SIZE = 10
 const route = useRoute()
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
+
+const {
+  isEditing,
+  hasSelectedElement,
+  selectedElement,
+  handleFrameLoad,
+  toggleEditMode,
+  clearSelectedElement,
+  exitEditMode,
+  buildPromptWithSelectedElement,
+} = useVisualEditing()
 
 const loading = ref(false)
 const historyLoading = ref(false)
@@ -62,10 +75,20 @@ const canManageApp = computed(() => Boolean(loginUserStore.isAdmin || isOwner.va
 const canChat = computed(() => canManageApp.value)
 const shouldShowPreview = computed(() => historyTotal.value >= 2)
 const canDownloadCode = computed(() => canManageApp.value && Boolean(previewUrl.value))
+const canUseVisualEditing = computed(() => canChat.value && Boolean(previewUrl.value))
 const composerTooltip = computed(() => (canChat.value ? '' : '你只能继续编辑自己的应用'))
 const downloadTooltip = computed(() =>
   canDownloadCode.value ? '' : '只有已经生成可访问预览地址的应用才允许下载代码',
 )
+const visualEditingTooltip = computed(() => {
+  if (!canChat.value) {
+    return '你只能继续编辑自己的应用'
+  }
+  if (!previewUrl.value) {
+    return '请先生成可预览的网站内容，再进入可视化编辑'
+  }
+  return isEditing.value ? '退出可视化编辑' : '进入可视化编辑'
+})
 const emptyDescription = computed(() =>
   canChat.value ? '发送一句描述，开始生成你的应用' : '当前应用暂无可展示的对话记录',
 )
@@ -161,6 +184,23 @@ const latestUserOnlyMessage = computed(() => {
     return undefined
   }
   return onlyMessage
+})
+
+const selectedElementDescription = computed(() => {
+  if (!selectedElement.value) {
+    return ''
+  }
+
+  const { tagName, id, className, textContent, path } = selectedElement.value
+  const details = [
+    `标签：${tagName}`,
+    id ? `ID：${id}` : '',
+    className ? `类名：${className}` : '',
+    textContent ? `文本：${textContent}` : '',
+    `路径：${path}`,
+  ].filter(Boolean)
+
+  return details.join(' ｜ ')
 })
 
 const syncPreviewUrl = () => {
@@ -264,17 +304,17 @@ const refreshPreview = async () => {
 }
 
 const streamAssistantReply = async (
-  content: string,
+  promptToBackend: string,
   assistantMessage: ChatMessage,
   historyIncrement: number,
 ) => {
   const search = new URLSearchParams({
     appId: String(appId.value),
-    message: content,
+    message: promptToBackend,
   })
 
   await streamSse({
-    url: `/app/chat/gen/code?${search.toString()}`,
+    url: `${API_BASE_URL}/app/chat/gen/code?${search.toString()}`,
     signal: currentAbortController!.signal,
     onMessage: (chunk) => {
       assistantMessage.content += chunk
@@ -299,10 +339,13 @@ const sendMessage = async (rawMessage?: string) => {
     return
   }
 
-  const content = (rawMessage ?? inputMessage.value).trim()
-  if (!content || sending.value || !hasEntityId(appId.value)) {
+  const displayContent = (rawMessage ?? inputMessage.value).trim()
+  if (!displayContent || sending.value || !hasEntityId(appId.value)) {
     return
   }
+
+  const promptToBackend = buildPromptWithSelectedElement(displayContent)
+  exitEditMode()
 
   currentAbortController?.abort()
   currentAbortController = new AbortController()
@@ -311,7 +354,7 @@ const sendMessage = async (rawMessage?: string) => {
   const userMessage: ChatMessage = {
     id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     role: 'user',
-    content,
+    content: displayContent,
     createTime: now,
   }
   const assistantMessage = createAssistantMessage(now)
@@ -323,7 +366,7 @@ const sendMessage = async (rawMessage?: string) => {
   scrollToBottom()
 
   try {
-    await streamAssistantReply(content, assistantMessage, 2)
+    await streamAssistantReply(promptToBackend, assistantMessage, 2)
   } catch (error) {
     if ((error as Error).name !== 'AbortError') {
       assistantMessage.content ||= '生成过程被中断了，请稍后重试。'
@@ -381,6 +424,7 @@ const tryAutoSendInitPrompt = async () => {
     if (!prompt) {
       return
     }
+
     autoSent.value = true
     await sendMessage(prompt)
     return
@@ -512,6 +556,16 @@ const handleDeploy = async () => {
   }
 }
 
+const handleToggleVisualEditing = () => {
+  if (!canUseVisualEditing.value) {
+    if (!previewUrl.value) {
+      message.warning('请先生成可预览的网站内容，再进入可视化编辑')
+    }
+    return
+  }
+  toggleEditMode()
+}
+
 const openPreviewInNewTab = () => {
   if (previewUrl.value) {
     window.open(previewUrl.value, '_blank')
@@ -532,6 +586,7 @@ const initializePage = async () => {
     return
   }
 
+  exitEditMode()
   messages.value = []
   previewUrl.value = ''
   historyTotal.value = 0
@@ -619,6 +674,20 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="composer">
+          <a-alert
+            v-if="hasSelectedElement"
+            class="composer__selection-alert"
+            type="info"
+            show-icon
+            closable
+            @close="clearSelectedElement"
+          >
+            <template #message>已选中页面元素</template>
+            <template #description>
+              {{ selectedElementDescription }}
+            </template>
+          </a-alert>
+
           <a-tooltip :title="composerTooltip" :disabled="canChat">
             <div class="composer__textarea-wrap">
               <a-textarea
@@ -630,12 +699,23 @@ onBeforeUnmount(() => {
               />
             </div>
           </a-tooltip>
+
           <div class="composer__footer">
             <span class="composer-tip">当前账号：{{ loginUserStore.loginUser.userName || '未登录' }}</span>
-            <a-button type="primary" :loading="sending" :disabled="!canChat" @click="sendMessage()">
-              <SendOutlined />
-              发送
-            </a-button>
+
+            <div class="composer__action-group">
+              <a-tooltip :title="visualEditingTooltip" :disabled="canUseVisualEditing">
+                <a-button :type="isEditing ? 'primary' : 'default'" :ghost="isEditing" @click="handleToggleVisualEditing">
+                  <HighlightOutlined />
+                  {{ isEditing ? '退出编辑' : '可视化编辑' }}
+                </a-button>
+              </a-tooltip>
+
+              <a-button type="primary" :loading="sending" :disabled="!canChat" @click="sendMessage()">
+                <SendOutlined />
+                发送
+              </a-button>
+            </div>
           </div>
         </div>
       </section>
@@ -650,6 +730,7 @@ onBeforeUnmount(() => {
         empty-description="继续补充你的需求，生成完成后这里会展示对应的网站内容。"
         :full-height="true"
         min-height="520px"
+        @frame-load="handleFrameLoad"
       >
         <template #actions>
           <a-button v-if="previewUrl" @click="openPreviewInNewTab">
@@ -917,6 +998,10 @@ onBeforeUnmount(() => {
   background: #fff;
 }
 
+.composer__selection-alert {
+  margin-bottom: 14px;
+}
+
 .composer__textarea-wrap {
   width: 100%;
 }
@@ -925,7 +1010,14 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   margin-top: 12px;
+}
+
+.composer__action-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .composer-tip {
@@ -961,7 +1053,8 @@ onBeforeUnmount(() => {
   .chat-topbar,
   .chat-topbar__left,
   .chat-topbar__actions,
-  .composer__footer {
+  .composer__footer,
+  .composer__action-group {
     flex-direction: column;
     align-items: stretch;
   }
