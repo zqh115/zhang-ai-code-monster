@@ -7,7 +7,7 @@ import com.zqh.zhangaicodemother.exception.ErrorCode;
 import com.zqh.zhangaicodemother.exception.ThrowUtils;
 import com.zqh.zhangaicodemother.manager.OssManager;
 import com.zqh.zhangaicodemother.service.ScreenshotService;
-import com.zqh.zhangaicodemother.untils.WebScreenshotUtils;
+import com.zqh.zhangaicodemother.utils.WebScreenshotUtils;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

@@ -1,4 +1,4 @@
-package com.zqh.zhangaicodemother.untils;
+package com.zqh.zhangaicodemother.utils;
 
 import cn.hutool.core.img.ImgUtil;
 import cn.hutool.core.io.FileUtil;
