@@ -1,5 +1,6 @@
 package com.zqh.zhangaicodemother.config;
 
+import cn.hutool.core.util.StrUtil;
 import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
 import dev.langchain4j.community.store.memory.chat.redis.StoreType;
 import lombok.Data;
@@ -21,15 +22,19 @@ public class RedisChatMemoryStoreConfig {
     private int port;
     private String password;
     private long ttl;
+
     @Bean
     public RedisChatMemoryStore redisChatMemoryStore() {
-        return RedisChatMemoryStore.builder()
+        RedisChatMemoryStore.Builder builder = RedisChatMemoryStore.builder()
                 .host(host)
                 .port(port)
-                .storeType(StoreType.STRING)
                 .password(password)
-                .ttl(ttl)
-                .build();
+                .ttl(ttl);
+        if (StrUtil.isNotBlank(password)) {
+            builder.user("default");
+        }
+        return builder.build();
     }
+
 
 }
