@@ -39,6 +39,9 @@ const featuredSearchParams = reactive<API.AppQueryRequest>({
   appName: '',
 })
 
+const resolveSearchPageSize = (pageSize?: number) =>
+  Math.min(pageSize ?? DEFAULT_APP_PAGE_SIZE, MAX_USER_PAGE_SIZE)
+
 const persistPendingInitPrompt = (appId: EntityId, initPrompt: string) => {
   if (typeof window === 'undefined') {
     return
@@ -61,13 +64,25 @@ const fetchMyApps = async () => {
 
   myLoading.value = true
   try {
+    const pageSize = resolveSearchPageSize(mySearchParams.pageSize)
     const res = await listMyAppVoByPage({
       ...mySearchParams,
-      pageSize: Math.min(mySearchParams.pageSize ?? DEFAULT_APP_PAGE_SIZE, MAX_USER_PAGE_SIZE),
+      pageSize,
     })
     if (res.data.code === 0 && res.data.data) {
-      myApps.value = res.data.data.records ?? []
-      myTotal.value = res.data.data.totalRow ?? 0
+      const records = res.data.data.records ?? []
+      const total = res.data.data.totalRow ?? 0
+      const currentPage = mySearchParams.pageNum ?? 1
+      const lastPage = Math.max(1, Math.ceil(total / pageSize))
+
+      if (!records.length && total > 0 && currentPage > lastPage) {
+        mySearchParams.pageNum = lastPage
+        await fetchMyApps()
+        return
+      }
+
+      myApps.value = records
+      myTotal.value = total
       return
     }
     message.error(`获取我的应用失败，${res.data.message ?? '请稍后重试'}`)
@@ -81,7 +96,7 @@ const fetchFeaturedApps = async () => {
   try {
     const res = await listGoodAppVoByPage({
       ...featuredSearchParams,
-      pageSize: Math.min(featuredSearchParams.pageSize ?? DEFAULT_APP_PAGE_SIZE, MAX_USER_PAGE_SIZE),
+      pageSize: resolveSearchPageSize(featuredSearchParams.pageSize),
     })
     if (res.data.code === 0 && res.data.data) {
       featuredApps.value = res.data.data.records ?? []
@@ -163,7 +178,7 @@ const handleDelete = async (appId?: EntityId) => {
   const res = await deleteApp({ id: appId })
   if (res.data.code === 0) {
     message.success('应用已删除')
-    fetchMyApps()
+    await fetchMyApps()
   } else {
     message.error(`删除失败，${res.data.message ?? '请稍后重试'}`)
   }

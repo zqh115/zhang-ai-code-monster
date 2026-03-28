@@ -2,6 +2,8 @@ package com.zqh.zhangaicodemother.ai;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.zqh.zhangaicodemother.ai.guardrail.PromptSafetyInputGuardrail;
+import com.zqh.zhangaicodemother.ai.guardrail.RetryOutputGuardrail;
 import com.zqh.zhangaicodemother.ai.tools.*;
 import com.zqh.zhangaicodemother.exception.BusinessException;
 import com.zqh.zhangaicodemother.exception.ErrorCode;
@@ -100,6 +102,8 @@ public class AiCodeGeneratorServiceFactory {
                         .streamingChatModel(reasoningStreamingChatModel)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(toolManager.getAllTools())
+                        .inputGuardrails(new PromptSafetyInputGuardrail())//添加输入护轨
+//                        .outputGuardrails(new RetryOutputGuardrail())//添加输出护轨,为了流式输出暂时不启用
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
                                 toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
                         ))
@@ -112,6 +116,8 @@ public class AiCodeGeneratorServiceFactory {
                         .chatModel(chatModel)
                         .streamingChatModel(openAiStreamingChatModel)
                         .chatMemory(chatMemory)
+                        .inputGuardrails(new PromptSafetyInputGuardrail())//添加输入护轨
+//                        .outputGuardrails(new RetryOutputGuardrail())//添加输出护轨,为了流式输出暂时不启用
                         .build();
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,
