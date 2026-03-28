@@ -32,6 +32,7 @@ type ChatMessage = {
 }
 
 const HISTORY_PAGE_SIZE = 10
+const PENDING_INIT_PROMPT_STORAGE_KEY = 'pending-app-init-prompt:'
 
 const route = useRoute()
 const router = useRouter()
@@ -72,7 +73,8 @@ const appName = computed(() => appDetail.value?.appName || `应用 #${appId.valu
 const isOwner = computed(() =>
   Boolean(appDetail.value?.userId && isSameEntityId(appDetail.value.userId, loginUserStore.loginUser.id)),
 )
-const canManageApp = computed(() => Boolean(loginUserStore.isAdmin || isOwner.value))
+const hasUnknownOwner = computed(() => Boolean(appDetail.value && !hasEntityId(appDetail.value.userId)))
+const canManageApp = computed(() => Boolean(loginUserStore.isAdmin || isOwner.value || hasUnknownOwner.value))
 const canChat = computed(() => canManageApp.value)
 const shouldShowPreview = computed(() => historyTotal.value >= 2)
 const canDownloadCode = computed(() => canManageApp.value && Boolean(previewUrl.value))
@@ -187,6 +189,12 @@ const latestUserOnlyMessage = computed(() => {
   return onlyMessage
 })
 
+const singleMessage = computed(() => (messages.value.length === 1 ? messages.value[0] : undefined))
+
+const hasAssistantReply = computed(() =>
+  messages.value.some((item) => item.role === 'assistant' && Boolean(item.content.trim())),
+)
+
 const selectedElementDescription = computed(() => {
   if (!selectedElement.value) {
     return ''
@@ -203,6 +211,24 @@ const selectedElementDescription = computed(() => {
 
   return details.join(' ｜ ')
 })
+
+const getPendingInitPromptStorageKey = () => `${PENDING_INIT_PROMPT_STORAGE_KEY}${appId.value}`
+
+const getPendingInitPrompt = () => {
+  if (typeof window === 'undefined' || !hasEntityId(appId.value)) {
+    return ''
+  }
+
+  return window.sessionStorage.getItem(getPendingInitPromptStorageKey())?.trim() ?? ''
+}
+
+const clearPendingInitPrompt = () => {
+  if (typeof window === 'undefined' || !hasEntityId(appId.value)) {
+    return
+  }
+
+  window.sessionStorage.removeItem(getPendingInitPromptStorageKey())
+}
 
 const syncPreviewUrl = () => {
   if (!appDetail.value?.id || !shouldShowPreview.value) {
@@ -432,21 +458,45 @@ const tryAutoSendInitPrompt = async () => {
     return
   }
 
-  if (historyTotal.value === 0) {
-    const prompt = appDetail.value.initPrompt?.trim()
+  const pendingPrompt = getPendingInitPrompt() || appDetail.value.initPrompt?.trim() || ''
+
+  if (!hasAssistantReply.value && messages.value.length === 0) {
+    const prompt = pendingPrompt
     if (!prompt) {
       return
     }
 
     autoSent.value = true
     await sendMessage(prompt)
+    clearPendingInitPrompt()
     return
+  }
+
+  if (!hasAssistantReply.value && singleMessage.value) {
+    const singleMessageContent = singleMessage.value.content.trim()
+    const content = pendingPrompt || singleMessageContent
+    const canContinue = Boolean(content) && (Boolean(pendingPrompt) || singleMessage.value.role === 'user')
+
+    if (canContinue) {
+      autoSent.value = true
+      await continueLatestMessage({
+        ...singleMessage.value,
+        role: 'user',
+        content,
+      })
+      clearPendingInitPrompt()
+      return
+    }
   }
 
   if (latestUserOnlyMessage.value) {
     autoSent.value = true
     await continueLatestMessage(latestUserOnlyMessage.value)
+    clearPendingInitPrompt()
+    return
   }
+
+  clearPendingInitPrompt()
 }
 
 const ensureLoginUserReady = async () => {

@@ -9,6 +9,7 @@ import { buildAppDeployUrl, DEFAULT_APP_PAGE_SIZE, type EntityId, hasEntityId, M
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
+const PENDING_INIT_PROMPT_STORAGE_KEY = 'pending-app-init-prompt:'
 
 const prompt = ref('')
 const creating = ref(false)
@@ -37,6 +38,19 @@ const featuredSearchParams = reactive<API.AppQueryRequest>({
   pageSize: DEFAULT_APP_PAGE_SIZE,
   appName: '',
 })
+
+const persistPendingInitPrompt = (appId: EntityId, initPrompt: string) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const normalizedPrompt = initPrompt.trim()
+  if (!normalizedPrompt) {
+    return
+  }
+
+  window.sessionStorage.setItem(`${PENDING_INIT_PROMPT_STORAGE_KEY}${String(appId)}`, normalizedPrompt)
+}
 
 const fetchMyApps = async () => {
   if (!loginUserStore.isLogin) {
@@ -99,6 +113,7 @@ const handleCreateApp = async (presetPrompt?: string) => {
     })
     if (res.data.code === 0 && res.data.data) {
       message.success('应用创建成功，正在进入生成页面')
+      persistPendingInitPrompt(res.data.data, finalPrompt)
       await router.push({
         name: 'appChat',
         params: {
