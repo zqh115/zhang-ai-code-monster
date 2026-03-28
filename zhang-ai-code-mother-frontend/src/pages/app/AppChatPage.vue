@@ -344,7 +344,7 @@ const streamAssistantReply = async (
     message: promptToBackend,
   })
 
-  await streamSse({
+  const streamResult = await streamSse({
     url: `${API_BASE_URL}/app/chat/gen/code?${search.toString()}`,
     signal: currentAbortController!.signal,
     onMessage: (chunk) => {
@@ -352,7 +352,18 @@ const streamAssistantReply = async (
       mergeMessages([])
       scrollToBottom()
     },
+    onBusinessError: (error) => {
+      assistantMessage.content = assistantMessage.content.trim()
+        ? `${assistantMessage.content}\n\n${error.message}`
+        : error.message
+      mergeMessages([])
+      scrollToBottom()
+    },
   })
+
+  if (streamResult.hasBusinessError) {
+    return
+  }
 
   if (!assistantMessage.content.trim()) {
     assistantMessage.content = '代码生成已完成，你可以继续补充需求来完善这个应用。'

@@ -2,6 +2,16 @@ type StreamSseOptions = {
   url: string
   signal?: AbortSignal
   onMessage: (chunk: string) => void
+  onBusinessError?: (error: {
+    message: string
+    code?: number
+    raw: string
+  }) => void
+  onDone?: () => void
+}
+
+type StreamSseResult = {
+  hasBusinessError: boolean
 }
 
 function normalizeSseChunk(raw: string) {
@@ -34,7 +44,100 @@ function normalizeSseChunk(raw: string) {
   return raw
 }
 
-export async function streamSse(options: StreamSseOptions) {
+function parseBusinessError(raw: string) {
+  const text = raw.trim()
+  if (!text) {
+    return {
+      message: '生成失败，请稍后重试',
+      raw,
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(text) as {
+      code?: number
+      message?: string
+    }
+    return {
+      message: parsed.message?.trim() || text,
+      code: parsed.code,
+      raw,
+    }
+  } catch {
+    return {
+      message: text,
+      raw,
+    }
+  }
+}
+
+function handleSseBlock(block: string, options: StreamSseOptions) {
+  const lines = block
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  const eventName =
+    lines
+      .find((line) => line.startsWith('event:'))
+      ?.slice(6)
+      .trim() || 'message'
+
+  const dataLines = lines
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trim())
+
+  if (eventName === 'done') {
+    options.onDone?.()
+    return { handled: true, hasBusinessError: false }
+  }
+
+  if (!dataLines.length) {
+    return { handled: false, hasBusinessError: false }
+  }
+
+  const rawData = dataLines.join('\n')
+  if (eventName === 'business-error') {
+    options.onBusinessError?.(parseBusinessError(rawData))
+    return { handled: true, hasBusinessError: true }
+  }
+
+  const normalized = normalizeSseChunk(rawData)
+  if (normalized) {
+    options.onMessage(normalized)
+  }
+
+  return { handled: true, hasBusinessError: false }
+}
+
+async function handleErrorResponse(response: Response, options: StreamSseOptions): Promise<StreamSseResult> {
+  const rawText = (await response.text()).trim()
+  if (!rawText) {
+    throw new Error(`流式请求失败：${response.status}`)
+  }
+
+  let hasBusinessError = false
+  const normalizedText = rawText.replace(/\r\n/g, '\n')
+
+  if (normalizedText.includes('event:') || normalizedText.includes('data:')) {
+    const blocks = normalizedText.split('\n\n').filter((block) => block.trim())
+    blocks.forEach((block) => {
+      const result = handleSseBlock(block, options)
+      hasBusinessError = hasBusinessError || result.hasBusinessError
+    })
+  }
+
+  if (!hasBusinessError) {
+    options.onBusinessError?.(parseBusinessError(rawText))
+    hasBusinessError = true
+  }
+
+  return {
+    hasBusinessError,
+  }
+}
+
+export async function streamSse(options: StreamSseOptions): Promise<StreamSseResult> {
   const response = await fetch(options.url, {
     method: 'GET',
     credentials: 'include',
@@ -44,13 +147,19 @@ export async function streamSse(options: StreamSseOptions) {
     },
   })
 
-  if (!response.ok || !response.body) {
+  if (!response.ok) {
+    return handleErrorResponse(response, options)
+    throw new Error(`流式请求失败：${response.status}`)
+  }
+
+  if (!response.body) {
     throw new Error(`流式请求失败：${response.status}`)
   }
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder('utf-8')
   let buffer = ''
+  let hasBusinessError = false
 
   while (true) {
     const { done, value } = await reader.read()
@@ -64,28 +173,18 @@ export async function streamSse(options: StreamSseOptions) {
     buffer = blocks.pop() ?? ''
 
     blocks.forEach((block) => {
-      const dataLines = block
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trim())
-
-      if (!dataLines.length) {
-        return
-      }
-
-      const normalized = normalizeSseChunk(dataLines.join('\n'))
-      if (normalized) {
-        options.onMessage(normalized)
-      }
+      const result = handleSseBlock(block, options)
+      hasBusinessError = hasBusinessError || result.hasBusinessError
     })
   }
 
   const tail = buffer.trim()
-  if (tail.startsWith('data:')) {
-    const normalized = normalizeSseChunk(tail.slice(5).trim())
-    if (normalized) {
-      options.onMessage(normalized)
-    }
+  if (tail) {
+    const result = handleSseBlock(tail, options)
+    hasBusinessError = hasBusinessError || result.hasBusinessError
+  }
+
+  return {
+    hasBusinessError,
   }
 }
